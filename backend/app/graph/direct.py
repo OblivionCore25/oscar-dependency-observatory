@@ -5,10 +5,12 @@ Provides logic for resolving the immediate (direct) dependencies
 of a specific package version, auto-ingesting if necessary.
 """
 
-from typing import List
+from typing import List, Optional
 
 from app.ingestion.npm import NpmConnector, PackageNotFoundError
 from app.normalization.npm_normalizer import NpmNormalizer
+from app.ingestion.pypi import PypiConnector
+from app.normalization.pypi_normalizer import PypiNormalizer
 from app.storage import StorageService
 from app.models.api import DependencyItem
 
@@ -26,7 +28,7 @@ class DirectDependencyService:
         Returns the direct dependencies for a given package and version.
         If the package is not found in storage, it attempts to ingest it.
         """
-        if ecosystem != "npm":
+        if ecosystem not in ["npm", "pypi"]:
             raise ValueError(f"Ecosystem {ecosystem} is not currently supported.")
 
         # Check if we already have this package's versions in our storage.
@@ -37,13 +39,13 @@ class DirectDependencyService:
 
         if not version_exists:
             # Auto-ingest fallback
-            await self._ingest_npm_package(package_name)
+            await self._ingest_package(ecosystem, package_name)
             
             # Check again after ingestion
             versions = self.storage.get_versions(ecosystem, package_name)
             version_exists = any(v.version == version for v in versions)
             if not version_exists:
-                # The package exists on npm, but the requested version does not.
+                # The package exists on the registry, but the requested version does not.
                 raise ValueError(f"Version {version} not found for package {package_name}")
 
         # Retrieve direct edges
@@ -60,13 +62,18 @@ class DirectDependencyService:
             
         return results
 
-    async def _ingest_npm_package(self, package_name: str) -> None:
-        """Fetches, normalizes, and saves an npm package to storage."""
-        async with NpmConnector() as connector:
-            raw_data = await connector.fetch_package(package_name)
+    async def _ingest_package(self, ecosystem: str, package_name: str) -> None:
+        """Fetches, normalizes, and saves a package to storage dynamically by ecosystem."""
+        if ecosystem == "npm":
+            async with NpmConnector() as connector:
+                raw_data = await connector.fetch_package(package_name)
+            package, versions, edges = NpmNormalizer.normalize_package_data(raw_data)
             
-        package, versions, edges = NpmNormalizer.normalize_package_data(raw_data)
-        
+        elif ecosystem == "pypi":
+            async with PypiConnector() as connector:
+                raw_data = await connector.fetch_package(package_name)
+            package, versions, edges = PypiNormalizer.normalize_package_data(raw_data)
+
         self.storage.save_package(package)
         self.storage.save_versions(versions)
         self.storage.save_edges(edges)

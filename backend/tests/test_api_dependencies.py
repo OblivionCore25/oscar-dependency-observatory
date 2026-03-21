@@ -65,6 +65,6 @@ def test_get_direct_dependencies_scoped(client, mock_storage):
 
 def test_get_direct_dependencies_invalid_ecosystem(client):
     """Test using an unsupported ecosystem returns 400."""
-    response = client.get("/dependencies/pypi/requests/2.28.0")
+    response = client.get("/dependencies/cargo/requests/2.28.0")
     assert response.status_code == 400
     assert "not currently supported" in response.json()["detail"]

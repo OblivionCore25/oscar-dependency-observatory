@@ -15,11 +15,13 @@ GET http://127.0.0.1:8000/health
 
 ---
 
-## 2. `GET /dependencies/npm/{package}/{version}` — What does this package need directly?
+## 2. `GET /dependencies/{ecosystem}/{package}/{version}` — What does this package need directly?
 
-When a developer publishes a package (like `react`), they list the other packages they relied upon to build it. Those are called **direct dependencies** — one level deep, no recursion.
+When a developer publishes a package (like `react` on `npm` or `fastapi` on `pypi`), they list the other packages they relied upon to build it. Those are called **direct dependencies** — one level deep, no recursion.
 
 **Analogy:** Like reading the ingredients list on the back of a food box. You see what's in it, but not what went into making each ingredient.
+
+> **Note:** The API supports both `npm` and `pypi` via the `{ecosystem}` variable.
 
 ```
 GET http://127.0.0.1:8000/dependencies/npm/react/18.2.0
@@ -38,7 +40,7 @@ GET http://127.0.0.1:8000/dependencies/npm/react/18.2.0
 
 ---
 
-## 3. `GET /dependencies/npm/{package}/{version}/transitive` — What does it ACTUALLY need, all the way down?
+## 3. `GET /dependencies/{ecosystem}/{package}/{version}/transitive` — What does it ACTUALLY need, all the way down?
 
 Your app uses `react` → which needs `loose-envify` → which needs `js-tokens`. The chain keeps going many levels deep. **Transitive dependencies** are the complete family tree of everything a package needs — including what *its* dependencies need.
 
@@ -64,7 +66,7 @@ GET http://127.0.0.1:8000/dependencies/npm/express/4.18.2/transitive
 
 ---
 
-## 4. `GET /packages/npm/{package}/{version}` — How important is this package?
+## 4. `GET /packages/{ecosystem}/{package}/{version}` — How important is this package?
 
 Beyond just listing dependencies, this endpoint computes **centrality metrics** for a package — its role in the broader ecosystem:
 
@@ -113,4 +115,26 @@ GET http://127.0.0.1:8000/analytics/top-risk?ecosystem=npm&limit=5
     }
   ]
 }
+```
+
+---
+
+## 6. `GET /export/{ecosystem}/graph` — Give me everything!
+
+Sometimes security researchers or data scientists just want the raw dataset to analyze in their own external tools like Pandas, Gephi, or Jupyter Notebooks.
+
+This endpoint dumps the **entire local database** for a given ecosystem (e.g. `npm` or `pypi`) globally.
+
+**Format Options:** 
+- `?format=json` (Returns a structured `{ "nodes": [...], "edges": [...] }` payload)
+- `?format=csv` (Returns a flat spreadsheet mapping `source` to `target`)
+
+```
+GET http://127.0.0.1:8000/export/pypi/graph?format=csv
+```
+
+```csv
+source,target,constraint,ecosystem
+pypi:fastapi@0.103.1,pypi:pydantic,>=1.7.4,pypi
+pypi:fastapi@0.103.1,pypi:starlette,>=0.27.0,<0.28.0,pypi
 ```
