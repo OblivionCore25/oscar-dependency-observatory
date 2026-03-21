@@ -1,0 +1,12 @@
+# OSCAR Dependency Graph Observatory — Backend Dependencies
+
+# API framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# Data validation
+pydantic==2.11.1
+pydantic-settings==2.8.1
+
+# HTTP client (for registry connectors)
+httpx==0.28.1
