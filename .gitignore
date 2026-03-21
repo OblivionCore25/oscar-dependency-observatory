@@ -1,0 +1,79 @@
+# =========================
+# OS / System Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Python (Backend)
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.env
+.env.*
+.venv/
+venv/
+pip-wheel-metadata/
+*.log
+
+# =========================
+# Node / Frontend
+# =========================
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Data / Generated Files
+# =========================
+data/*
+*.csv
+*.json
+
+# Allow small example datasets if needed
+!data/sample/
+
+# =========================
+# Exports / Artifacts
+# =========================
+exports/
+*.zip
+*.tar.gz
+
+# =========================
+# Notebooks / Experiments
+# =========================
+notebooks/.ipynb_checkpoints/
+
+# =========================
+# Internal / Planning Docs
+# =========================
+docs/internal/
+planning/
+agent-roles.md
+
+# =========================
+# Docker (optional overrides)
+# =========================
+docker/*.env
+
+# =========================
+# Temporary files
+# =========================
+tmp/
+temp/
