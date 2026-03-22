@@ -156,6 +156,80 @@ Returns a globally computed array estimating the most trusted natively queried d
 }
 ```
 
+## 6. Graph Export Endpoint (JSON)
+Exports the entire local dependency graph for an ecosystem as a structured JSON payload. Useful for external analysis tools or research pipelines.
+
+- **Method**: `GET`
+- **URL**: `http://127.0.0.1:8000/export/npm/graph?format=json`
+- **Inputs** (Path + Query Parameters):
+  - `ecosystem`: `npm` or `pypi`
+  - `format`: `json` (default)
+- **Expected Status**: `200 OK`
+- **Expected Output**:
+```json
+{
+  "ecosystem": "npm",
+  "nodes": [
+    { "id": "npm:react@18.2.0", "ecosystem": "npm", "package": "react", "version": "18.2.0" }
+  ],
+  "edges": [
+    { "source": "npm:react@18.2.0", "target": "npm:loose-envify", "constraint": "^1.1.0" }
+  ]
+}
+```
+
+---
+
+## 7. Graph Export Endpoint (CSV)
+Same as above, but returns a flat CSV edge-list suitable for import into Gephi, Pandas, or R for network analysis.
+
+- **Method**: `GET`
+- **URL**: `http://127.0.0.1:8000/export/pypi/graph?format=csv`
+- **Inputs** (Path + Query Parameters):
+  - `ecosystem`: `npm` or `pypi`
+  - `format`: `csv`
+- **Expected Status**: `200 OK`
+- **Content-Type**: `text/csv`
+- **Expected Output**:
+```csv
+source,target,constraint,ecosystem
+pypi:fastapi@0.103.1,pypi:pydantic,>=1.7.4,pypi
+pypi:fastapi@0.103.1,pypi:starlette,>=0.27.0,pypi
+```
+
+> **Note:** The CSV export only lists relationships (edges). To get node metadata, use the JSON format instead.
+
+---
+
+## 8. PyPI Ecosystem — Direct Dependencies
+All dependency endpoints work with `pypi` as the ecosystem, not just `npm`. The backend auto-ingests by calling `pypi.org` on first request.
+
+- **Method**: `GET`
+- **URL**: `http://127.0.0.1:8000/dependencies/pypi/fastapi/0.103.1`
+- **Inputs**:
+  - `ecosystem`: `pypi`
+  - `package`: `fastapi`
+  - `version`: `0.103.1`
+- **Expected Status**: `200 OK`
+- **Expected Output**:
+```json
+{
+  "package": "fastapi",
+  "version": "0.103.1",
+  "ecosystem": "pypi",
+  "dependencies": [
+    { "name": "pydantic", "constraint": "!=1.8,!=1.8.1,<3.0.0,>=1.7.4" },
+    { "name": "starlette", "constraint": ">=0.27.0,<0.28.0" },
+    { "name": "typing-extensions", "constraint": ">=4.5.0" }
+  ]
+}
+```
+
+> **Note:** Test and dev-only dependencies (e.g. `pytest`) are automatically filtered out by the PyPI normalizer.
+
+---
+
 ## Troubleshooting
-- **`404 Not Found`**: The requested package doesn't exist on the NPM public registry, or you made a typo.
-- **`500 Internal Server Error`**: Usually implies a network failure navigating towards the `registry.npmjs.org` APIs while attempting auto-ingestion. Ensure your internet connection is active.
+- **`404 Not Found`**: The requested package doesn't exist on the npm or PyPI public registry, or you made a typo.
+- **`400 Bad Request`**: An unsupported ecosystem (e.g. `cargo`) or unsupported export format (e.g. `xml`) was requested.
+- **`500 Internal Server Error`**: Usually implies a network failure while contacting `registry.npmjs.org` or `pypi.org` during auto-ingestion. Ensure your internet connection is active.
