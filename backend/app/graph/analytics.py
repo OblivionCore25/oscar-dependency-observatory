@@ -23,30 +23,24 @@ class AnalyticsService:
         """
         Calculates fan-in, fan-out, and bottleneck scores for a specific package.
         """
-        # Fan-out (direct dependencies)
+        # Fan-out (direct dependencies of this specific version)
         direct_edges = self.storage.get_edges_for_version(ecosystem, package_name, version)
         fan_out = len(direct_edges)
         
-        # Fan-in (how many packages depend on this package)
-        # Note: In MVP file storage, this requires scanning all edges.
-        # This is expensive locally but sufficient for the MVP.
+        # Fan-in: count unique PACKAGE NAMES that depend on this package (deduped across versions)
         all_edges = self.storage.get_all_edges(ecosystem)
-        
-        # Look for instances where `target_package` exactly matches this package name.
-        # We don't resolve semver constraints here for fan_in MVP, just package references.
-        dependent_packages = set()
+        dependent_packages: set = set()
         for edge in all_edges:
             if edge.target_package == package_name:
-                dependent_packages.add(edge.source_package)
+                dependent_packages.add(edge.source_package)  # add name, not per-version edge
                 
         fan_in = len(dependent_packages)
         
-        # Bottleneck score = fan_in * fan_out (e.g. high centrality)
         bottleneck_score = float(fan_in * fan_out)
         
         return PackageMetrics(
             directDependencies=fan_out,
-            transitiveDependencies=0, # Optional extra traversal
+            transitiveDependencies=0,
             fanIn=fan_in,
             fanOut=fan_out,
             bottleneckScore=bottleneck_score,
@@ -59,17 +53,16 @@ class AnalyticsService:
         """
         all_edges = self.storage.get_all_edges(ecosystem)
         
-        # fan_in counts per package
-        fan_in_map: Dict[str, int] = defaultdict(int)
+        # fan_in: unique SOURCE PACKAGE NAMES that depend on a target (deduplicated across versions)
+        fan_in_map: Dict[str, set] = defaultdict(set)
+        # fan_out: number of dependencies each package declares (edge count across versions)
+        fan_out_map: Dict[str, int] = defaultdict(int)
         
-        # track all known versions to return in the list
         all_pkgs_map: Dict[str, str] = {}
         for edge in all_edges:
-            # We count unique sources per target to avoid inflating fan-in via multi-versions
-            # But simpler MVP: just sum up references
-            fan_in_map[edge.target_package] += 1
+            fan_in_map[edge.target_package].add(edge.source_package)  # set dedup: react@18.0+18.1 = 1 unique dependent
+            fan_out_map[edge.source_package] += 1
             all_pkgs_map[edge.source_package] = edge.source_version
-            # target versions might not be natively recorded unless we ingest them
             
         # Get actual versions for target packages from storage if available
         all_versions = self.storage.get_all_versions(ecosystem)
@@ -78,9 +71,21 @@ class AnalyticsService:
             # simple override gets us latest mapped chronologically
             latest_versions[v.package_name] = v.version
             
+        # Union of all known packages (appear either as source or target)
+        all_known_packages = set(fan_in_map.keys()) | set(fan_out_map.keys())
+            
         items = []
-        for pkg, fan_in in fan_in_map.items():
-            version = latest_versions.get(pkg, "unknown")
+        for pkg in all_known_packages:
+            fan_in = len(fan_in_map.get(pkg, set()))  # unique package count
+            fan_out = fan_out_map.get(pkg, 0)
+            version = latest_versions.get(pkg, all_pkgs_map.get(pkg, "unknown"))
+            
+            # Get the exact fan-out (direct dependencies) for this specific version
+            version_edges = self.storage.get_edges_for_version(ecosystem, pkg, version)
+            version_fan_out = len(version_edges)
+            
+            # Bottleneck = fan_in × fan_out: high when a pkg is both heavily used AND has many deps
+            bottleneck_score = float(fan_in * fan_out) if fan_out > 0 else float(fan_in)
             items.append(
                 TopRiskItem(
                     id=f"{ecosystem}:{pkg}@{version}",
@@ -88,13 +93,15 @@ class AnalyticsService:
                     name=pkg,
                     version=version,
                     fanIn=fan_in,
-                    fanOut=0, # Would require a huge join for the whole list MVP. 
-                    bottleneckScore=float(fan_in) # Simple proxy for top-risk sort
+                    fanOut=fan_out,
+                    versionFanOut=version_fan_out,
+                    bottleneckScore=bottleneck_score
                 )
             )
             
-        # Sort desc by fan_in
-        items.sort(key=lambda x: x.fan_in, reverse=True)
+        # Sort desc by bottleneck score (fan_in × fan_out), then fan_in as tie-breaker
+        items.sort(key=lambda x: (x.bottleneck_score, x.fan_in), reverse=True)
         top_items = items[:limit]
         
         return TopRiskResponse(items=top_items)
+

@@ -23,21 +23,23 @@ Two storage-level methods scan every JSON file on disk for the requested ecosyst
 
 ---
 
-### Step 2 — Compute Fan-In
-For every edge `A → B`, B's **fan-in counter** is incremented by 1.
+### Step 2 — Compute Fan-In (Deduplicated)
+For every edge `A@v → B`, B's **fan-in set** gains A's package name. Multiple versions of A count as **one** unique dependent.
 
 ```
 Edges in storage:
   react@18.2.0     → loose-envify
+  react@18.3.1     → loose-envify
   react-dom@18.2.0 → loose-envify
 
+Fan-in set for loose-envify: { react, react-dom }
 Result:
-  loose-envify.fan_in = 2
+  loose-envify.fan_in = 2  (not 3 — react counted once)
 ```
 
-**What it answers:** *"How many other packages in our dataset depend on this one?"*
+**What it answers:** *"How many unique packages in our dataset depend on this one?"*
 
-A high fan-in means many packages rely on this one — so if it has a vulnerability, the blast radius is large.
+A high fan-in means many distinct packages rely on this one — so if it has a vulnerability, the blast radius is large.
 
 ---
 
@@ -89,5 +91,6 @@ The busiest intersections are the ones that, if they broke down (e.g. a critical
 ## Limitations (MVP)
 
 - Scores are **relative to local cache** — the more packages you ingest, the more accurate the ranking becomes.
+- Fan-in is **deduplicated by package name** (e.g. 113 versions of `next` depending on `styled-jsx` counts as 1). This aligns with npm's "dependents" count but means the absolute number depends on dataset breadth.
 - The `bottleneck_score` formula is a naive proxy. A production system might use more sophisticated centrality algorithms (e.g. betweenness centrality via NetworkX or Neo4j).
 - Diamond patterns and transitive depth are not factored into the current score.

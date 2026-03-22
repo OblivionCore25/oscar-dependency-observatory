@@ -51,6 +51,8 @@ export interface PackageDetailsResponse {
   metrics: PackageMetrics;
 }
 
+// Analytics -----------------------------------------------------------------
+
 export interface TopRiskItem {
   id: string;
   ecosystem: string;
@@ -58,9 +60,11 @@ export interface TopRiskItem {
   version: string;
   fanIn: number;
   fanOut: number;
+  versionFanOut: number;
   bottleneckScore: number;
 }
 
 export interface TopRiskResponse {
   items: TopRiskItem[];
 }
+

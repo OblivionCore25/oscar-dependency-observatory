@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-500: #3b82f6; /* Tailwind blue-500 */
+  --color-primary-500: #3b82f6; /* T@tailwind utilities;
+
+/* Custom Scrollbar for Data Tables */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}-500 */
 }

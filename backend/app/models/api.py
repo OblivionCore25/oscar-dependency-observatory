@@ -121,6 +121,7 @@ class TopRiskItem(BaseModel):
     version: str = Field(..., examples=["1.0.0"])
     fan_in: int = Field(default=0, alias="fanIn")
     fan_out: int = Field(default=0, alias="fanOut")
+    version_fan_out: int = Field(default=0, alias="versionFanOut")
     bottleneck_score: float = Field(default=0.0, alias="bottleneckScore")
 
     model_config = {"populate_by_name": True}

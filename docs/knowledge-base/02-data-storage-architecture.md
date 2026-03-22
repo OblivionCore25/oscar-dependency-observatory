@@ -20,11 +20,13 @@ When data is fetched and cached, it's organized in this folder structure:
 backend/data/
 └── npm/
     ├── packages/
-    │   └── react.json          ← Package identity metadata
+    │   └── react.json              ← Package identity metadata
     ├── versions/
-    │   └── react.json          ← All known versions of react
+    │   └── react.json              ← All known versions of react (array)
     └── edges/
-        └── react.json          ← All dependency relationships for react
+        ├── react_18.2.0.json       ← Dependencies declared by react@18.2.0
+        ├── react_18.3.1.json       ← Dependencies declared by react@18.3.1
+        └── ...                     ← One file per (package, version) pair
 ```
 
 Each `ecosystem` (e.g. `npm`, `pypi`) gets its own top-level folder. Inside, data is split by type: packages, versions, and edges (relationships).

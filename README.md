@@ -1,4 +1,4 @@
-# OSCAR -- Dependency Graph Observatory
+# OSCAR — Dependency Graph Observatory
 
 Graph-based observatory for analyzing transitive dependencies, systemic
 risk, and structural patterns in open-source software ecosystems.
@@ -10,7 +10,7 @@ risk, and structural patterns in open-source software ecosystems.
 The **Dependency Graph Observatory** is a core module of the OSCAR
 project:
 
-> **OSCAR --- Open Supply-Chain Assurance & Resilience for Cloud-Native
+> **OSCAR — Open Supply-Chain Assurance & Resilience for Cloud-Native
 > Software Ecosystems**
 
 This module focuses on constructing and analyzing **directed dependency
@@ -54,11 +54,12 @@ The initial prototype aims to:
 -   Ingest dependency data from **npm and PyPI**
 -   Construct **transitive dependency graphs**
 -   Compute key graph-based metrics:
-    -   Fan-in / Fan-out
+    -   Fan-in / Fan-out (deduplicated by unique package name)
     -   Transitive reach
     -   Diamond dependency patterns
     -   Bottleneck (centrality proxy) scores
--   Provide simple APIs or CLI queries
+-   Provide REST APIs for querying and exploration
+-   Visualize dependency graphs via an interactive web UI
 -   Export datasets for research and analysis
 
 ------------------------------------------------------------------------
@@ -108,59 +109,134 @@ Future phases will extend into:
 
 ## 🗂️ Project Structure
 
-    oscar-dependency-observatory/
-
-    backend/
-      app/
-        ingestion/
-        graph/
-        analytics/
-        api/
-        models/
-        storage/
-
-    scripts/
-    data/
-    notebooks/
-    docker/
+```
+oscar-dependency-observatory/
+├── backend/
+│   └── app/
+│       ├── api/                # FastAPI route handlers
+│       │   ├── endpoints.py    # Dependencies & package details endpoints
+│       │   ├── analytics.py    # Top-risk analytics endpoint
+│       │   └── exports.py      # JSON/CSV graph export endpoint
+│       ├── config/
+│       │   └── settings.py     # Environment-based configuration (OSCAR_ prefix)
+│       ├── exporters/
+│       │   └── graph_exporter.py  # JSON and CSV export logic
+│       ├── graph/
+│       │   ├── analytics.py    # Fan-in, fan-out, bottleneck score computation
+│       │   ├── direct.py       # Direct dependency service (with auto-ingest)
+│       │   └── transitive.py   # BFS transitive graph walker
+│       ├── ingestion/
+│       │   ├── npm.py          # npm registry connector (httpx)
+│       │   └── pypi.py         # PyPI registry connector (httpx)
+│       ├── models/
+│       │   ├── api.py          # Pydantic API response schemas
+│       │   └── domain.py       # Internal domain models (Package, Version, Edge)
+│       ├── normalization/
+│       │   ├── npm_normalizer.py   # npm JSON → domain model transform
+│       │   └── pypi_normalizer.py  # PyPI JSON → domain model transform (PEP 508)
+│       ├── storage/
+│       │   └── json_storage.py # Flat-file JSON storage implementation
+│       └── main.py             # FastAPI application entry point
+│
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── GraphCanvas.tsx     # Cytoscape.js graph visualization
+│       │   ├── Layout.tsx          # App shell with navigation
+│       │   └── TopRiskTable.tsx    # Top risk analytics table
+│       ├── hooks/
+│       │   ├── useAnalyticsQuery.ts  # React Query hook for top-risk
+│       │   ├── useGraphQuery.ts      # React Query hook for transitive graph
+│       │   └── usePackageQuery.ts    # React Query hook for package details
+│       ├── pages/
+│       │   ├── GraphViewer.tsx    # Graph visualization page
+│       │   ├── PackageSearch.tsx  # Package search & details page
+│       │   └── TopRisk.tsx        # Top-risk analytics page
+│       ├── services/
+│       │   └── api.ts            # Axios API client
+│       ├── types/
+│       │   └── api.ts            # TypeScript API response interfaces
+│       ├── App.tsx               # Router and app layout
+│       ├── main.tsx              # React entry point
+│       └── index.css             # Global styles
+│
+├── docs/
+│   ├── technical-reference.md          # Comprehensive API & metrics reference
+│   ├── backend-implementation-guide.md # Backend architecture design doc
+│   ├── ui-implementation-guide.md      # Frontend architecture design doc
+│   ├── ui-plan.md                      # UI component specifications
+│   ├── knowledge-base/                 # Developer knowledge articles
+│   └── internal/                       # Internal process & roadmap docs
+│
+├── CONTRIBUTING.md       # How to contribute
+├── LICENSE               # MIT License
+└── README.md             # This file
+```
 
 ------------------------------------------------------------------------
 
-## 🚀 Getting Started (Planned)
+## 🚀 Getting Started
 
-### 1. Run API (FastAPI)
+### Prerequisites
 
-    uvicorn app.main:app --reload
+- Python 3.11+
+- Node.js 18+
 
-### 2. Ingest a package
+### 1. Start the Backend (FastAPI)
 
-    GET /ingest/npm/{package}
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install fastapi uvicorn pydantic pydantic-settings httpx
+uvicorn app.main:app --reload
+```
 
-### 3. Query dependencies
+The API server starts at `http://localhost:8000`. Swagger docs are available at `http://localhost:8000/docs`.
 
-    GET /dependencies/{package}/{version}
-    GET /dependencies/{package}/{version}/transitive
+### 2. Start the Frontend (React + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The web UI starts at `http://localhost:5173` and proxies API calls to the backend automatically.
+
+### 3. Verify
+
+```bash
+curl http://localhost:8000/health
+# → {"status":"ok"}
+```
 
 ------------------------------------------------------------------------
 
-## 📊 Example Metrics
+## 📡 API Endpoints
 
--   **Fan-out**: Number of dependencies (direct + transitive)
--   **Fan-in**: Number of dependents
--   **Bottleneck score**:
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Health check |
+| `/dependencies/{ecosystem}/{package}/{version}` | GET | Direct dependencies |
+| `/dependencies/{ecosystem}/{package}/{version}/transitive` | GET | Full transitive dependency graph (BFS) |
+| `/packages/{ecosystem}/{package}/{version}` | GET | Package details with computed metrics |
+| `/analytics/top-risk?ecosystem=npm&limit=10` | GET | Top risk packages ranked by bottleneck score |
+| `/export/{ecosystem}/graph?format=json` | GET | Full graph export (JSON or CSV) |
 
-```{=html}
-<!-- -->
-```
-    score = fan_in * log(transitive_dependents + 1)
+See [docs/technical-reference.md](docs/technical-reference.md) for complete request/response schemas and metric formulas.
 
--   **Diamond detection**:
+------------------------------------------------------------------------
 
-```{=html}
-<!-- -->
-```
-    A → B → D
-    A → C → D
+## 📊 Metrics
+
+| Metric | Formula | Interpretation |
+|---|---|---|
+| **Fan-In** | Count of unique packages that depend on P | How widely adopted is this package? |
+| **Fan-Out** | Count of all dependency edges from P (across versions) | How many external risks does this package introduce? |
+| **Bottleneck Score** | `fan_in × fan_out` | How central is this package in the dependency highway? |
+
+> Fan-in is **deduplicated by unique package name** — if `next` appears as a dependent 113 times across versions, it counts as 1.
 
 ------------------------------------------------------------------------
 
@@ -168,39 +244,57 @@ Future phases will extend into:
 
 The observatory produces:
 
--   Dependency graph datasets (JSON / CSV)
--   Snapshot-based graph states
+-   Dependency graph datasets (JSON / CSV) via the export endpoint
+-   Snapshot-based graph states (planned)
 -   Derived metrics for analysis
 
 These datasets are intended for:
 
 -   Research experiments
--   Visualization
+-   Visualization (Gephi, NetworkX, Jupyter)
 -   Risk modeling
+
+------------------------------------------------------------------------
+
+## 📚 Documentation
+
+| Document | Description |
+|---|---|
+| [Technical Reference](docs/technical-reference.md) | Complete API specs, metric formulas, data model, architecture |
+| [Knowledge Base](docs/knowledge-base/README.md) | Developer-friendly explanations of key concepts |
+| [Backend Guide](docs/backend-implementation-guide.md) | Backend architecture design decisions |
+| [UI Guide](docs/ui-implementation-guide.md) | Frontend architecture and component design |
+| [Contributing](CONTRIBUTING.md) | How to set up and contribute |
 
 ------------------------------------------------------------------------
 
 ## 🔜 Roadmap
 
-### Phase A (Current)
+### Phase A (Current — MVP)
 
--   Dependency graph ingestion
--   Graph analytics
--   Dataset generation
+-   ✅ Dependency graph ingestion (npm + PyPI)
+-   ✅ Graph analytics (fan-in, fan-out, bottleneck score)
+-   ✅ Interactive web UI (graph viewer, package search, top risk)
+-   ✅ Dataset export (JSON + CSV)
+-   🔲 Unit test coverage
+-   🔲 SQLite storage migration ([roadmap](docs/internal/broader-ingestion-roadmap.md))
 
 ### Phase B
 
 -   Code-level dependency mapping (methods/classes)
 -   Language-specific analysis (Java, Python)
+-   Broader dataset ingestion via seed crawling
 
 ### Phase C
 
 -   Unified multi-level graph (code + package + SBOM)
--   Advanced risk modeling
+-   Advanced risk modeling (betweenness centrality, blast radius)
 
 ------------------------------------------------------------------------
 
-## 🤝 Collaboration
+## 🤝 Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
 This repository is an **early-stage working prototype** intended to
 facilitate collaboration and research discussion.
@@ -218,14 +312,14 @@ Feedback is highly encouraged, especially on:
 
 ## 📄 License
 
-TBD
+This project is licensed under the [MIT License](LICENSE).
 
 ------------------------------------------------------------------------
 
 ## 👤 Author
 
-Fabian Gonzalez\
-Software Engineer \| Distributed Systems \| Cloud Infrastructure
+Fabian Gonzalez  
+Software Engineer | Distributed Systems | Cloud Infrastructure
 
 ------------------------------------------------------------------------
 
