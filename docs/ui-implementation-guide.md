@@ -104,7 +104,7 @@ Pure helper functions
 ### Required Pages
 
 #### Page 1: Package Search
-- Input ecosystem
+- Input ecosystem (Dropdown: `npm` | `pypi`)
 - Input package
 - Optional version
 
@@ -149,26 +149,40 @@ Pure helper functions
 
 # 6. UI API Contracts
 
-### Graph Endpoint
-GET /graphs/{ecosystem}/{package}/{version}
+### Graph Endpoint (Transitive)
+GET /dependencies/{ecosystem}/{package}/{version}/transitive
 
 Response:
-```
+```json
 {
-  "nodes": [],
-  "edges": []
+  "root": "npm:react@18.2.0",
+  "nodes": [
+    { "id": "npm:react@18.2.0", "label": "react@18.2.0", "ecosystem": "npm", "package": "react", "version": "18.2.0" }
+  ],
+  "edges": [
+    { "source": "npm:react@18.2.0", "target": "npm:loose-envify", "constraint": "^1.1.0" }
+  ]
 }
 ```
 
+### Direct Dependencies
+GET /dependencies/{ecosystem}/{package}/{version}
+
 ### Package Details
 GET /packages/{ecosystem}/{package}/{version}
+*(Includes `metrics` object with `fanIn`, `fanOut`, `bottleneckScore`, `diamondCount`, etc.)*
 
 ### Analytics
 GET /analytics/top-risk
 
+### Export Graph
+GET /export/{ecosystem}/graph?format={json|csv}
+
 ### Constraints
-- UI MUST NOT infer missing data
-- Backend MUST provide complete data
+- UI MUST handle `404 Not Found` and `500 Server Error` (e.g., registry down) gracefully.
+- UI MUST display a loading state for the graph (initial ingest can take seconds).
+- UI MUST NOT infer missing data.
+- Backend MUST provide complete data.
 
 ---
 
@@ -210,8 +224,8 @@ GET /analytics/top-risk
 - Display metrics
 
 ## Phase 4 – Polish
-- Add controls
-- Improve UX states
+- Add controls (including "Download Data" linking to `/export` API)
+- Improve UX states (loading spinners, error banners)
 
 ---
 
@@ -227,7 +241,7 @@ Implement routing:
 - /analytics
 
 ### Ticket 3
-Define TypeScript types for API responses
+Define TypeScript types for API responses (e.g., `TransitiveDependenciesResponse`, `GraphNode`, `GraphEdge`, `PackageMetrics`, `TopRiskItem`)
 
 ### Ticket 4
 Create PackageSearchForm
