@@ -10,6 +10,7 @@ A curated collection of explanations, guides, and architectural notes for develo
 | [02-data-storage-architecture.md](./02-data-storage-architecture.md) | How data is stored and retrieved (not a DB — flat JSON files) |
 | [03-auto-ingest-on-read.md](./03-auto-ingest-on-read.md) | What happens when a package doesn't exist locally |
 | [04-analytics-top-risk-calculation.md](./04-analytics-top-risk-calculation.md) | How fan-in, fan-out, and bottleneck scores are computed |
+| [05-example-packages-for-graph-testing.md](./05-example-packages-for-graph-testing.md) | Real-world NPM and PyPI packages with 10+ dependencies, useful for UI demos and graph stress testing |
 
 ---
 

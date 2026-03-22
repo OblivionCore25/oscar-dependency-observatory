@@ -101,11 +101,14 @@ async def get_package_details(
     
     try:
         versions = direct_service.storage.get_versions(ecosystem, package)
-        if not versions:
-            await direct_service._ingest_npm_package(package)
-            versions = direct_service.storage.get_versions(ecosystem, package)
-        
         version_exists = any(v.version == version for v in versions)
+
+        if not version_exists:
+            # Auto-ingest the specific version if it isn't stored yet
+            await direct_service._ingest_package(ecosystem, package, version)
+            versions = direct_service.storage.get_versions(ecosystem, package)
+            version_exists = any(v.version == version for v in versions)
+
         if not version_exists:
             raise HTTPException(status_code=404, detail=f"Version {version} not found for package {package}")
             

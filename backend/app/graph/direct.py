@@ -38,8 +38,8 @@ class DirectDependencyService:
         version_exists = any(v.version == version for v in versions)
 
         if not version_exists:
-            # Auto-ingest fallback
-            await self._ingest_package(ecosystem, package_name)
+            # Auto-ingest fallback: pass the specific version so PyPI fetches the right one
+            await self._ingest_package(ecosystem, package_name, version)
             
             # Check again after ingestion
             versions = self.storage.get_versions(ecosystem, package_name)
@@ -62,16 +62,19 @@ class DirectDependencyService:
             
         return results
 
-    async def _ingest_package(self, ecosystem: str, package_name: str) -> None:
+    async def _ingest_package(self, ecosystem: str, package_name: str, version: Optional[str] = None) -> None:
         """Fetches, normalizes, and saves a package to storage dynamically by ecosystem."""
         if ecosystem == "npm":
+            # NPM's registry returns all versions in a single call, so no version needed
             async with NpmConnector() as connector:
                 raw_data = await connector.fetch_package(package_name)
             package, versions, edges = NpmNormalizer.normalize_package_data(raw_data)
             
         elif ecosystem == "pypi":
+            # PyPI's /json endpoint defaults to latest if version is omitted.
+            # We MUST pass the requested version to get the right metadata.
             async with PypiConnector() as connector:
-                raw_data = await connector.fetch_package(package_name)
+                raw_data = await connector.fetch_package(package_name, version=version)
             package, versions, edges = PypiNormalizer.normalize_package_data(raw_data)
 
         self.storage.save_package(package)
