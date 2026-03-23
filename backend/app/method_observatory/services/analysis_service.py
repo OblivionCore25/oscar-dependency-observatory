@@ -8,7 +8,7 @@ from ..analysis.call_resolver import CallResolver
 from ..analysis.graph_builder import GraphBuilder
 from ..metrics.basic_metrics import compute_basic_metrics
 from ..models.analysis_result import AnalysisResult, AnalysisMeta
-from ..storage.json_storage import JsonStorage
+from ..storage.sqlite_storage import SqliteStorage
 
 
 class AnalysisService:
@@ -17,7 +17,7 @@ class AnalysisService:
         self.data_directory = data_directory
         self.oscar_version = oscar_version
         self.max_file_size_kb = max_file_size_kb
-        self.storage = JsonStorage(data_directory)
+        self.storage = SqliteStorage(data_directory)
 
     def analyze(self, project_path: str, project_slug: str, exclude_tests: bool = False) -> AnalysisResult:
         """
@@ -54,14 +54,23 @@ class AnalysisService:
             all_imports.extend(result.imports)
             all_inheritance.extend(result.inheritance)
 
-            # Build import map for this module
-            import_map[result.module.id] = visitor.scope.get_all_imports()
+            # Delete old import map logic. We now use the global symbol table.
+
+        # ── 3.5 Build Project-Wide Symbol Table ──────────────────────
+        from ..analysis.symbol_table import ProjectSymbolTable
+        symbol_table_builder = ProjectSymbolTable()
+        global_symbol_table = symbol_table_builder.build(
+            modules=all_modules,
+            imports=all_imports,
+            methods=all_methods,
+            classes=all_classes
+        )
 
         # ── 4. Resolve calls ─────────────────────────────────────────
         resolver = CallResolver(
             all_methods=all_methods,
             all_classes=all_classes,
-            import_map=import_map,
+            import_map=global_symbol_table,
         )
         resolved_calls = [resolver.resolve(rc) for rc in all_raw_calls]
         resolved_calls = [c for c in resolved_calls if c is not None]
@@ -72,6 +81,16 @@ class AnalysisService:
 
         # ── 6. Compute metrics ───────────────────────────────────────
         metrics = compute_basic_metrics(graph, all_methods, resolved_calls)
+
+        from ..metrics.graph_metrics import compute_graph_metrics
+        advanced_metrics = compute_graph_metrics(graph)
+        
+        for m in metrics:
+            adv = advanced_metrics.get(m.method_id, {})
+            m.betweenness_centrality = adv.get("betweenness_centrality")
+            m.pagerank = adv.get("pagerank")
+            m.community_id = adv.get("community_id")
+            m.blast_radius = adv.get("blast_radius")
 
         # ── 7. Compute analysis metadata ─────────────────────────────
         unresolved_count = sum(1 for c in resolved_calls if c.call_type == "unresolved")

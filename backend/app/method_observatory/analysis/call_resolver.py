@@ -120,10 +120,25 @@ class CallResolver:
         """
         attr_name: str = raw_call["attr_name"]
         receiver: str | None = raw_call["receiver_name"]
+        receiver_type: str | None = raw_call.get("receiver_type")
 
         caller_module = caller_id.rsplit(":", 1)[0] if ":" in caller_id else caller_id
         caller_method = self._method_by_id.get(caller_id)
         caller_class = caller_method.class_name if caller_method else None
+
+        # Step 0: Type-Annotation resolution!
+        if receiver_type:
+            # We match the declared type hint straight to the available class index
+            class_candidates = [c for c in self._class_by_id.values() if c.name == receiver_type or c.id == receiver_type]
+            if class_candidates:
+                target_id = f"{class_candidates[0].id}.{attr_name}"
+                if target_id in self._method_by_id:
+                    return CallEdge(
+                        source_id=caller_id, target_id=target_id,
+                        call_type=CallType.DIRECT, line=line,
+                        confidence=0.9, argument_count=arg_count,
+                        is_conditional=is_conditional,
+                    )
 
         # Step 1: self.method() resolution
         if receiver == "self" and caller_class:

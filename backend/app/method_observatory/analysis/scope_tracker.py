@@ -7,6 +7,7 @@ class Scope:
     kind: str                          # "module" | "class" | "function"
     name: str                          # Name of the scope owner
     bindings: dict[str, str] = field(default_factory=dict)
+    type_annotations: dict[str, str] = field(default_factory=dict)
     # bindings: local name → resolved qualified name
     # e.g., {"np": "numpy", "UserService": "app.services.user:UserService"}
 
@@ -52,6 +53,18 @@ class ScopeTracker:
         for scope in reversed(self._stack):
             if name in scope.bindings:
                 return scope.bindings[name]
+        return None
+
+    def bind_type(self, local_name: str, type_name: str) -> None:
+        """Record a type annotation for a local variable or parameter."""
+        if self._stack:
+            self._stack[-1].type_annotations[local_name] = type_name
+
+    def resolve_type(self, name: str) -> str | None:
+        """Look up a type annotation from innermost to outermost scope."""
+        for scope in reversed(self._stack):
+            if name in scope.type_annotations:
+                return scope.type_annotations[name]
         return None
 
     def record_import(self, local_name: str, module: str) -> None:

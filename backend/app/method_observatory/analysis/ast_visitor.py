@@ -206,6 +206,10 @@ class ASTVisitor(ast.NodeVisitor):
         # Descend into function body (will encounter Call nodes)
         self._function_stack.append(method_id)
         self.scope.push("function", method_id)
+        
+        # Record parameter type annotations into the current scope
+        self._record_param_types(node.args)
+        
         self.generic_visit(node)
         self.scope.pop()
         self._function_stack.pop()
@@ -241,9 +245,15 @@ class ASTVisitor(ast.NodeVisitor):
             raw_call["call_expr_type"] = "attribute"
             raw_call["attr_name"] = func.attr
             # Best-effort receiver name extraction
-            raw_call["receiver_name"] = self._extract_receiver_name(func.value)
+            receiver_name = self._extract_receiver_name(func.value)
+            raw_call["receiver_name"] = receiver_name
+            if receiver_name:
+                raw_call["receiver_type"] = self.scope.resolve_type(receiver_name)
+            else:
+                raw_call["receiver_type"] = None
         else:
             raw_call["call_expr_type"] = "other"  # indirect call, lambda, etc.
+            raw_call["receiver_type"] = None
 
         self.result.raw_calls.append(raw_call)
         self.generic_visit(node)
@@ -316,3 +326,41 @@ class ASTVisitor(ast.NodeVisitor):
         # Simplified: always False in Phase 1.
         # Phase 2: track If/Try/While stack during traversal.
         return False
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """Capture explicit type annotations on variables."""
+        target = node.target
+        annotation = getattr(node, "annotation", None)
+        if hasattr(target, "id") and annotation is not None:
+            try:
+                type_name = ast.unparse(annotation)
+                self.scope.bind_type(getattr(target, "id"), type_name)
+            except Exception:
+                pass
+        self.generic_visit(node)
+
+    def _record_param_types(self, args: ast.arguments) -> None:
+        """Capture type annotations assigned to function parameters."""
+        for arg in args.posonlyargs + args.args + args.kwonlyargs:
+            annotation = getattr(arg, "annotation", None)
+            if annotation is not None:
+                try:
+                    self.scope.bind_type(arg.arg, ast.unparse(annotation))
+                except Exception:
+                    pass
+        
+        vararg = getattr(args, "vararg", None)
+        if vararg is not None:
+            var_ann = getattr(vararg, "annotation", None)
+            if var_ann is not None:
+                try:
+                    self.scope.bind_type(vararg.arg, ast.unparse(var_ann))
+                except Exception: pass
+                
+        kwarg = getattr(args, "kwarg", None)
+        if kwarg is not None:
+            kw_ann = getattr(kwarg, "annotation", None)
+            if kw_ann is not None:
+                try:
+                    self.scope.bind_type(kwarg.arg, ast.unparse(kw_ann))
+                except Exception: pass
