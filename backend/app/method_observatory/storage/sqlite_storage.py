@@ -110,7 +110,7 @@ class SqliteStorage:
                     m.id, run_id, project_slug, m.name, m.module, m.class_name, m.complexity, m.loc, m.model_dump_json()
                 ))
             cur.executemany(
-                "INSERT INTO methods (id, run_id, project_slug, name, module, class_name, complexity, loc, json_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO methods (id, run_id, project_slug, name, module, class_name, complexity, loc, json_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 methods_data
             )
 
@@ -132,7 +132,7 @@ class SqliteStorage:
                     mx.method_id, run_id, project_slug, mx.bottleneck_score, mx.betweenness_centrality, mx.pagerank, mx.community_id, mx.blast_radius, mx.model_dump_json()
                 ))
             cur.executemany(
-                "INSERT INTO method_metrics (method_id, run_id, project_slug, bottleneck_score, betweenness_centrality, pagerank, community_id, blast_radius, json_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO method_metrics (method_id, run_id, project_slug, bottleneck_score, betweenness_centrality, pagerank, community_id, blast_radius, json_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 metrics_data
             )
 

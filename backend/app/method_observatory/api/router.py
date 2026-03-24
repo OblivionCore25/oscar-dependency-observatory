@@ -116,6 +116,112 @@ async def get_orphans(
             for m in orphans if m.method_id in method_map]
 
 
+@router.get("/{project_slug}/hotspots", response_model=list[dict])
+async def get_hotspots(
+    project_slug: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    service: AnalysisService = Depends(get_service),
+):
+    """
+    Return methods ranked by composite risk score (complexity * centrality * blast_radius).
+    """
+    result = service.load(project_slug)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Project '{project_slug}' not found")
+
+    method_map = {m.id: m for m in result.methods}
+    hotspots = []
+    for m in result.metrics:
+        comp = m.complexity or 1
+        cent = m.betweenness_centrality or 0.0
+        blast = m.blast_radius or 0
+        score = comp * cent * blast
+        hotspots.append({
+            "method": method_map[m.method_id].model_dump() if m.method_id in method_map else None,
+            "metrics": m.model_dump(),
+            "composite_risk": score
+        })
+    
+    hotspots = [h for h in hotspots if h["method"]]
+    ranked = sorted(hotspots, key=lambda x: x["composite_risk"], reverse=True)
+    return ranked[:limit]
+
+
+@router.get("/{project_slug}/communities", response_model=dict[str, list[dict]])
+async def get_communities(
+    project_slug: str,
+    service: AnalysisService = Depends(get_service),
+):
+    """
+    Return methods grouped by Louvain community assignment.
+    """
+    result = service.load(project_slug)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Project '{project_slug}' not found")
+
+    method_map = {m.id: m for m in result.methods}
+    communities = {}
+    for m in result.metrics:
+        cid = m.community_id
+        if cid is None:
+            continue
+        cid_str = str(cid)
+        if cid_str not in communities:
+            communities[cid_str] = []
+        if m.method_id in method_map:
+            communities[cid_str].append({
+                "method": method_map[m.method_id].model_dump(),
+                "metrics": m.model_dump()
+            })
+    return communities
+
+
+@router.get("/{project_slug}/method/{method_id:path}/blast-radius", response_model=dict)
+async def get_blast_radius(
+    project_slug: str,
+    method_id: str,
+    service: AnalysisService = Depends(get_service),
+):
+    """
+    Return the transitive closure of downstream callees for a specific method.
+    """
+    result = service.load(project_slug)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Project '{project_slug}' not found")
+
+    import networkx as nx
+    G = nx.DiGraph()
+    for c in result.calls:
+        if c.confidence > 0:
+            G.add_edge(c.source_id, c.target_id, **c.model_dump())
+
+    if method_id not in G:
+        raise HTTPException(status_code=404, detail=f"Method '{method_id}' not found in graph")
+
+    reachable = list(nx.descendants(G, method_id))
+    
+    method_map = {m.id: m.model_dump() for m in result.methods}
+    metrics_map = {m.method_id: m.model_dump() for m in result.metrics}
+
+    nodes = []
+    edges = []
+    
+    for n in [method_id] + reachable:
+        if n in method_map:
+            nodes.append({**method_map[n], **metrics_map.get(n, {})})
+            
+    subgraph = G.subgraph([method_id] + reachable)
+    for u, v, data in subgraph.edges(data=True):
+        edges.append(data)
+
+    return {
+        "root": method_id,
+        "node_count": len(nodes),
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
 @router.get("/{project_slug}/method/{method_id:path}", response_model=MethodDetailResponse)
 async def get_method_detail(
     project_slug: str,

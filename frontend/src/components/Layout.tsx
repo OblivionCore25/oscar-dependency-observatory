@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Search, AlertTriangle, Network } from 'lucide-react';
+import { Network, AlertTriangle, FlaskConical, Search } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -54,6 +54,18 @@ export function Layout({ children }: LayoutProps) {
           >
             <AlertTriangle className="w-5 h-5 mr-3" />
             Top Risk
+          </NavLink>
+
+          <NavLink 
+            to="/methods" 
+            className={({ isActive }) => 
+              `flex items-center px-4 py-3 rounded-md transition-colors ${
+                isActive ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+              }`
+            }
+          >
+            <FlaskConical className="w-5 h-5 mr-3" />
+            Method Observatory
           </NavLink>
         </nav>
       </aside>

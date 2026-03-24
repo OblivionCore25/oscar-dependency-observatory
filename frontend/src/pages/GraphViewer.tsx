@@ -1,7 +1,7 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useGraphQuery } from '../hooks/useGraphQuery';
 import GraphCanvas from '../components/GraphCanvas';
-import { Network, Loader2, ArrowLeft, AlertCircle, PanelRight } from 'lucide-react';
+import { Network, Loader2, ArrowLeft, AlertCircle, PanelRight, FlaskConical } from 'lucide-react';
 import { useState } from 'react';
 
 export default function GraphViewer() {
@@ -55,6 +55,15 @@ export default function GraphViewer() {
         </div>
 
         <div className="pointer-events-auto flex gap-2">
+          {hasParams && (
+            <button
+              onClick={() => navigate(`/methods/graph?project=${packageName}-${version}`)}
+              className="bg-white border border-indigo-200 shadow-sm text-indigo-700 px-3 py-2 rounded-lg font-medium text-sm hover:bg-indigo-50 flex items-center transition-colors"
+            >
+              <FlaskConical className="w-4 h-4 mr-2" />
+              Method Call Graph
+            </button>
+          )}
           {data && (
             <button
               onClick={() => setSidebarOpen(o => !o)}
