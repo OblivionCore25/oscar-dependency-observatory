@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Loader2, AlertCircle, Network, ArrowRight } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Network, ArrowRight, FlaskConical } from 'lucide-react';
 import { usePackageQuery } from '../hooks/usePackageQuery';
 
 export default function PackageSearch() {
@@ -113,15 +113,23 @@ export default function PackageSearch() {
                 {data.name} <span className="text-gray-400 font-normal ml-2">v{data.version}</span>
               </h2>
             </div>
-            
-            <button 
-              onClick={handleViewGraph}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center shadow-sm transition-colors"
-            >
-              <Network className="w-4 h-4 mr-2 text-blue-600" />
-              View Graph
-              <ArrowRight className="w-4 h-4 ml-2 text-gray-400" />
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => navigate('/methods')}
+                className="px-4 py-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-md font-medium hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center shadow-sm transition-colors"
+              >
+                <FlaskConical className="w-4 h-4 mr-2 text-purple-600" />
+                Method Insights
+              </button>
+              <button 
+                onClick={handleViewGraph}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center shadow-sm transition-colors"
+              >
+                <Network className="w-4 h-4 mr-2 text-blue-600" />
+                View Graph
+                <ArrowRight className="w-4 h-4 ml-2 text-gray-400" />
+              </button>
+            </div>
           </div>
           
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

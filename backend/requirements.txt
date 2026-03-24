@@ -10,3 +10,6 @@ pydantic-settings==2.8.1
 
 # HTTP client (for registry connectors)
 httpx==0.28.1
+
+# Graph processing
+networkx>=3.0.0

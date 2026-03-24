@@ -30,6 +30,21 @@ class Settings(BaseSettings):
     storage_mode: str = "file"  # "file" | "sqlite" | "postgres"
     data_directory: str = "data"
 
+    # --- Method Observatory ---
+    method_data_directory: str = "data"
+    method_max_file_size_kb: int = Field(
+        default=500,
+        description="Skip Python source files larger than this (usually generated code)",
+    )
+    method_exclude_test_files: bool = Field(
+        default=False,
+        description="If True, exclude test_*.py files and tests/ directories from analysis",
+    )
+    method_min_confidence: float = Field(
+        default=0.0,
+        description="Default minimum edge confidence for graph exports",
+    )
+
     model_config = {
         "env_prefix": "OSCAR_",
         "env_file": ".env",
