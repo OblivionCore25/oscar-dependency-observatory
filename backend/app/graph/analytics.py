@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 from collections import defaultdict
 
 from app.storage import StorageService
-from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse
+from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse, CoverageResponse
 from app.graph.direct import DirectDependencyService
 
 class AnalyticsService:
@@ -95,13 +95,56 @@ class AnalyticsService:
                     fanIn=fan_in,
                     fanOut=fan_out,
                     versionFanOut=version_fan_out,
-                    bottleneckScore=bottleneck_score
+                    bottleneckScore=bottleneck_score,
+                    bottleneckPercentile=0.0,  # filled in below
                 )
             )
-            
+
+        # Compute percentile rank across ALL packages (before slicing to limit)
+        # Sort ascending so we can assign rank by position
+        total = len(items)
+        if total > 1:
+            items.sort(key=lambda x: x.bottleneck_score)  # ascending for rank
+            for rank, item in enumerate(items):
+                # Use mid-point convention: items with same score share the average rank
+                item.bottleneck_percentile = round((rank / (total - 1)) * 100, 1)
+        elif total == 1:
+            items[0].bottleneck_percentile = 100.0
+
         # Sort desc by bottleneck score (fan_in × fan_out), then fan_in as tie-breaker
         items.sort(key=lambda x: (x.bottleneck_score, x.fan_in), reverse=True)
         top_items = items[:limit]
-        
-        return TopRiskResponse(items=top_items)
 
+        return TopRiskResponse(items=top_items, totalPackages=total)
+
+    # Known ecosystem sizes (approximate published figures, updated 2024)
+    _ECOSYSTEM_ESTIMATES: Dict[str, int] = {
+        "npm": 3_000_000,
+        "pypi": 550_000,
+        "maven": 600_000,
+        "cargo": 150_000,
+    }
+
+    async def get_coverage(self, ecosystem: str) -> CoverageResponse:
+        """
+        Returns graph coverage statistics for the given ecosystem:
+        how many unique packages are ingested vs. the estimated ecosystem total.
+        """
+        all_versions = self.storage.get_all_versions(ecosystem)
+        unique_packages: set = {v.package_name for v in all_versions}
+        # Also count packages that only appear as edge targets (not yet fully ingested)
+        all_edges = self.storage.get_all_edges(ecosystem)
+        for edge in all_edges:
+            unique_packages.add(edge.source_package)
+            unique_packages.add(edge.target_package)
+
+        ingested = len(unique_packages)
+        estimated = self._ECOSYSTEM_ESTIMATES.get(ecosystem.lower(), 0)
+        coverage_pct = round((ingested / estimated) * 100, 4) if estimated > 0 else 0.0
+
+        return CoverageResponse(
+            ecosystem=ecosystem,
+            ingestedPackages=ingested,
+            estimatedTotal=estimated,
+            coveragePct=coverage_pct,
+        )

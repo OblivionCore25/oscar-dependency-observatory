@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAnalyticsQuery } from '../hooks/useAnalyticsQuery';
+import { useAnalyticsQuery, useCoverageQuery } from '../hooks/useAnalyticsQuery';
 import TopRiskTable from '../components/TopRiskTable';
-import { AlertTriangle, Loader2, AlertCircle, BarChart3, ArrowRight } from 'lucide-react';
+import { AlertTriangle, Loader2, AlertCircle, BarChart3, ArrowRight, DatabaseZap, Info } from 'lucide-react';
 
 export default function TopRisk() {
   const navigate = useNavigate();
@@ -14,6 +14,8 @@ export default function TopRisk() {
     ecosystem,
     limit,
   });
+
+  const { data: coverage } = useCoverageQuery(ecosystem);
 
   return (
     <div className="h-full flex flex-col bg-slate-50 overflow-y-auto w-full">
@@ -88,6 +90,41 @@ export default function TopRisk() {
                 </select>
               </div>
             </div>
+
+            {/* Graph Coverage Banner */}
+            {coverage && (
+              <div className="mb-6 bg-white border border-slate-200 rounded-xl px-5 py-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <DatabaseZap className="w-5 h-5 text-indigo-500" />
+                    <span className="text-sm font-semibold text-gray-800">Graph Coverage</span>
+                    <span className="text-xs font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full ring-1 ring-indigo-200">
+                      {coverage.coveragePct < 0.01
+                        ? `<0.01%`
+                        : `${coverage.coveragePct.toFixed(2)}%`}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all"
+                        style={{ width: `${Math.max(0.4, Math.min(100, coverage.coveragePct))}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>{coverage.ingestedPackages.toLocaleString()} packages ingested</span>
+                      <span>est. {(coverage.estimatedTotal / 1_000_000).toFixed(1)}M total in {coverage.ecosystem.toUpperCase()}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-xs shrink-0">
+                    <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>Fan-in accuracy improves as graph coverage increases. Percentile ranks are relative to ingested packages only.</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Content State Handling */}
             <div className="min-h-[400px]">

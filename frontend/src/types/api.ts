@@ -62,9 +62,19 @@ export interface TopRiskItem {
   fanOut: number;
   versionFanOut: number;
   bottleneckScore: number;
+  bottleneckPercentile: number;
 }
 
 export interface TopRiskResponse {
   items: TopRiskItem[];
+  totalPackages: number;
 }
+
+export interface CoverageResponse {
+  ecosystem: string;
+  ingestedPackages: number;
+  estimatedTotal: number;
+  coveragePct: number;
+}
+
 

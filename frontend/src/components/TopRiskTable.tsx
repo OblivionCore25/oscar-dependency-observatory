@@ -27,8 +27,19 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
   const startIndex = (validCurrentPage - 1) * pageSize;
   const paginatedItems = items.slice(startIndex, startIndex + pageSize);
 
-  // Find max bottleneck score for the progress bars (based on all loaded items, not just the page)
-  const maxScore = Math.max(...items.map(item => item.bottleneckScore));
+  // Percentile thresholds for colour coding
+  const getPercentileColor = (pct: number) => {
+    if (pct >= 90) return { bar: 'bg-red-500', badge: 'text-red-700 bg-red-50 ring-red-200' };
+    if (pct >= 70) return { bar: 'bg-amber-500', badge: 'text-amber-700 bg-amber-50 ring-amber-200' };
+    return { bar: 'bg-blue-500', badge: 'text-blue-700 bg-blue-50 ring-blue-200' };
+  };
+
+  // Ordinal suffix helper
+  const ordinal = (n: number) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
@@ -38,7 +49,10 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
             <tr>
               <th className="px-6 py-4">Package</th>
               <th className="px-6 py-4">Version</th>
-              <th className="px-6 py-4 w-64">Bottleneck Score</th>
+              <th className="px-6 py-4 w-64">
+                Bottleneck Score
+                <span className="font-normal text-gray-400 lowercase ml-1">(percentile rank)</span>
+              </th>
               <th className="px-6 py-4 text-right">Fan-In <span className="font-normal text-gray-400 lowercase">(Ecosystem)</span></th>
               <th className="px-6 py-4 text-right">Fan-Out</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -46,12 +60,8 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paginatedItems.map((item) => {
-              const scorePercent = maxScore > 0 ? (item.bottleneckScore / maxScore) * 100 : 0;
-              
-              // Color mapping based on percentile roughly
-              let barColor = "bg-blue-500";
-              if (scorePercent > 80) barColor = "bg-red-500";
-              else if (scorePercent > 50) barColor = "bg-amber-500";
+              const colors = getPercentileColor(item.bottleneckPercentile);
+              const pct = item.bottleneckPercentile;
 
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
@@ -64,13 +74,18 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
                   </td>
                   <td className="px-6 py-4 min-w-[200px]">
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-semibold tabular-nums text-gray-700 text-xs">
-                        {item.bottleneckScore.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ring-inset tabular-nums ${colors.badge}`}>
+                          {ordinal(Math.round(pct))} pct
+                        </span>
+                        <span className="text-[10px] text-gray-400 tabular-nums">
+                          raw: {item.bottleneckScore.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
                       <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${barColor}`} 
-                          style={{ width: `${Math.max(2, scorePercent)}%` }}
+                        <div
+                          className={`h-full rounded-full ${colors.bar}`}
+                          style={{ width: `${Math.max(2, pct)}%` }}
                         />
                       </div>
                     </div>
