@@ -3,7 +3,7 @@ OSCAR Dependency Graph Observatory — Analytics Endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.api import TopRiskResponse
+from app.models.api import TopRiskResponse, CoverageResponse
 from app.graph.analytics import AnalyticsService
 from app.storage.json_storage import JSONStorage
 
@@ -35,3 +35,23 @@ async def get_top_risk(
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
+    "/analytics/coverage",
+    response_model=CoverageResponse,
+    summary="Get Graph Coverage",
+    description="Returns how many unique packages are ingested vs. the estimated ecosystem total."
+)
+async def get_coverage(
+    ecosystem: str = "npm",
+    service: AnalyticsService = Depends(get_analytics_service)
+):
+    """
+    Returns graph coverage statistics to assess fan-in metric confidence.
+    """
+    try:
+        return await service.get_coverage(ecosystem)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+

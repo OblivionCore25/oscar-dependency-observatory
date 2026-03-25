@@ -123,6 +123,11 @@ class TopRiskItem(BaseModel):
     fan_out: int = Field(default=0, alias="fanOut")
     version_fan_out: int = Field(default=0, alias="versionFanOut")
     bottleneck_score: float = Field(default=0.0, alias="bottleneckScore")
+    bottleneck_percentile: float = Field(
+        default=0.0,
+        alias="bottleneckPercentile",
+        description="Percentile rank (0–100) of this package's bottleneck score within the ingested graph.",
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -131,3 +136,35 @@ class TopRiskResponse(BaseModel):
     """Response for GET /analytics/top-risk"""
 
     items: List[TopRiskItem] = Field(default_factory=list)
+    total_packages: int = Field(
+        default=0,
+        alias="totalPackages",
+        description="Total unique packages in the ingested graph for this ecosystem.",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+# ─── Coverage ────────────────────────────────────────────────────────
+
+class CoverageResponse(BaseModel):
+    """Response for GET /analytics/coverage"""
+
+    ecosystem: str = Field(..., examples=["npm"])
+    ingested_packages: int = Field(
+        ...,
+        alias="ingestedPackages",
+        description="Number of unique packages ingested into the local graph.",
+    )
+    estimated_total: int = Field(
+        ...,
+        alias="estimatedTotal",
+        description="Approximate total packages published in this ecosystem (published figure).",
+    )
+    coverage_pct: float = Field(
+        ...,
+        alias="coveragePct",
+        description="Percentage of the ecosystem covered by the ingested graph (0–100).",
+    )
+
+    model_config = {"populate_by_name": True}

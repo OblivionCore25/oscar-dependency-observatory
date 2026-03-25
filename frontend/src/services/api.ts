@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { PackageDetailsResponse, TransitiveGraphResponse, TopRiskResponse } from '../types/api';
+import type { PackageDetailsResponse, TransitiveGraphResponse, TopRiskResponse, CoverageResponse } from '../types/api';
 
 // Uses the Vite proxy (/api -> http://127.0.0.1:8000)
 const apiClient = axios.create({
@@ -37,3 +37,11 @@ export const getTopRisk = async (ecosystem: string = 'npm', limit: number = 50):
   });
   return response.data;
 };
+
+export const getCoverage = async (ecosystem: string = 'npm'): Promise<CoverageResponse> => {
+  const response = await apiClient.get<CoverageResponse>('/analytics/coverage', {
+    params: { ecosystem }
+  });
+  return response.data;
+};
+
