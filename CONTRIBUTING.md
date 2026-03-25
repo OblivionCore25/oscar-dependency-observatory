@@ -48,25 +48,33 @@ curl http://localhost:8000/health
 ```
 backend/
   app/
-    api/            # FastAPI route handlers
-    config/         # Environment-based settings
-    exporters/      # JSON/CSV graph export
-    graph/          # Analytics, direct, and transitive services
-    ingestion/      # npm and PyPI registry connectors
-    models/         # Pydantic domain + API schemas
-    normalization/  # Registry-specific data normalizers
-    storage/        # JSON flat-file storage layer
-  data/             # Local data files (gitignored)
+    api/              # Package-level FastAPI route handlers
+    config/           # Environment-based settings
+    exporters/        # JSON/CSV graph export
+    graph/            # Analytics, direct, and transitive services
+    ingestion/        # npm and PyPI registry connectors
+    models/           # Pydantic domain + API schemas
+    normalization/    # Registry-specific data normalizers
+    storage/          # JSON flat-file storage layer
+    method_observatory/  # ★ Method-level analysis subsystem
+      api/            # 10 REST endpoints under /methods
+      analysis/       # AST visitor, call resolver, symbol table, complexity
+      ingestion/      # Python file scanner + parser
+      metrics/        # Fan-in/out, centrality, Louvain, blast radius
+      models/         # MethodNode, CallEdge, AnalysisResult
+      services/       # Analysis pipeline orchestrator
+      storage/        # SQLite persistence (method_graph.db)
+  data/               # Local data files (gitignored)
 
 frontend/
   src/
-    components/     # React UI components
-    hooks/          # Custom React Query hooks
-    pages/          # Page-level route components
-    services/       # API client (axios)
-    types/          # TypeScript interfaces
+    components/       # React UI components (Cytoscape.js + Sigma.js graphs)
+    hooks/            # Custom React Query hooks
+    pages/            # 7 page-level route components
+    services/         # API client (axios)
+    types/            # TypeScript interfaces
 
-docs/               # Project documentation
+docs/                 # Project documentation
 ```
 
 ---
