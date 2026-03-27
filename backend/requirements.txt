@@ -16,3 +16,5 @@ networkx>=3.0.0
 alembic
 psycopg2-binary
 sqlalchemy
+scipy
+numpy

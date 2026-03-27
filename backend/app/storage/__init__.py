@@ -5,7 +5,7 @@ Contains protocols and implementations for persisting domain models.
 """
 
 from typing import Protocol, List, Optional
-from app.models.domain import Package, Version, DependencyEdge
+from app.models.domain import Package, Version, DependencyEdge, Snapshot
 
 
 class StorageService(Protocol):
@@ -35,4 +35,16 @@ class StorageService(Protocol):
         ...
 
     def get_all_edges(self, ecosystem: str) -> List[DependencyEdge]:
+        ...
+
+    def create_snapshot(self, ecosystem: str, description: Optional[str] = None) -> Snapshot:
+        """Create a point-in-time snapshot of the current edges."""
+        ...
+
+    def list_snapshots(self, ecosystem: str) -> List[Snapshot]:
+        """List all available snapshots for an ecosystem."""
+        ...
+
+    def get_snapshot_edges(self, snapshot_id: str) -> List[DependencyEdge]:
+        """Get the edges that were saved in a specific snapshot."""
         ...
