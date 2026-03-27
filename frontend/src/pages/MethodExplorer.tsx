@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Network, Search, Loader2, AlertCircle, PlayCircle, BarChart3, Users } from 'lucide-react';
+import { Network, Search, Loader2, AlertCircle, PlayCircle, BarChart3, Users, DownloadCloud } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 // Fetch the list of analyzed projects
@@ -12,13 +12,38 @@ const fetchProjects = async () => {
 
 export default function MethodExplorer() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [packageName, setPackageName] = useState('');
+  const [packageVersion, setPackageVersion] = useState('');
+  const queryClient = useQueryClient();
 
   const { data: projects, isLoading, error } = useQuery({
     queryKey: ['method-projects'],
     queryFn: fetchProjects,
   });
 
-  const filteredProjects = projects?.filter(p => p.toLowerCase().includes(searchTerm.toLowerCase())) || [];
+  const analyzeMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await axios.post('http://localhost:8000/methods/analyze', {
+        package_name: packageName,
+        package_version: packageVersion,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      setPackageName('');
+      setPackageVersion('');
+      queryClient.invalidateQueries({ queryKey: ['method-projects'] });
+    },
+  });
+
+  const handleAnalyze = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (packageName && packageVersion) {
+      analyzeMutation.mutate();
+    }
+  };
+
+  const filteredProjects = projects?.filter((p: string) => p.toLowerCase().includes(searchTerm.toLowerCase())) || [];
 
   return (
     <div className="max-w-5xl mx-auto p-8 h-full flex flex-col">
@@ -30,6 +55,63 @@ export default function MethodExplorer() {
         <p className="mt-3 text-lg text-gray-500 max-w-2xl mx-auto">
           Analyze internal Python method topologies. Select a strictly analyzed project repository to browse architectural communities and hotspot blast limits.
         </p>
+      </div>
+
+      <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <DownloadCloud className="w-5 h-5 mr-2 text-indigo-500" />
+          Automated Package Analysis
+        </h2>
+        <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label htmlFor="packageName" className="block text-sm font-medium text-gray-700 mb-1">PyPI Package Name</label>
+            <input
+              type="text"
+              id="packageName"
+              value={packageName}
+              onChange={(e) => setPackageName(e.target.value)}
+              placeholder="e.g., requests, boto3"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              required
+              disabled={analyzeMutation.isPending}
+            />
+          </div>
+          <div className="flex-1">
+            <label htmlFor="packageVersion" className="block text-sm font-medium text-gray-700 mb-1">Version</label>
+            <input
+              type="text"
+              id="packageVersion"
+              value={packageVersion}
+              onChange={(e) => setPackageVersion(e.target.value)}
+              placeholder="e.g., 2.31.0"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              required
+              disabled={analyzeMutation.isPending}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={analyzeMutation.isPending || !packageName || !packageVersion}
+              className="w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              {analyzeMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                'Download & Analyze'
+              )}
+            </button>
+          </div>
+        </form>
+        {analyzeMutation.isError && (
+          <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            {(analyzeMutation.error as any)?.response?.data?.detail || analyzeMutation.error.message || 'Analysis failed. Check package name and version.'}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
@@ -69,7 +151,7 @@ export default function MethodExplorer() {
 
           {!isLoading && !error && filteredProjects.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredProjects.map((slug) => (
+              {filteredProjects.map((slug: string) => (
                 <div key={slug} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
                   <div className="flex justify-between items-start mb-4">
                     <div>
