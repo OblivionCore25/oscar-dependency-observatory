@@ -5,15 +5,12 @@ OSCAR Dependency Graph Observatory — API Endpoints
 from fastapi import APIRouter, HTTPException, Depends
 from app.models.api import DirectDependenciesResponse, TransitiveDependenciesResponse
 from app.graph.direct import DirectDependencyService
-from app.storage.json_storage import JSONStorage
+from app.storage.factory import get_storage
 from app.ingestion.npm import PackageNotFoundError
 
 router = APIRouter(tags=["Dependencies"])
 
 # Dependency Injection for the API
-def get_storage():
-    return JSONStorage(base_dir="data")
-
 def get_direct_dependency_service(storage=Depends(get_storage)):
     return DirectDependencyService(storage)
 

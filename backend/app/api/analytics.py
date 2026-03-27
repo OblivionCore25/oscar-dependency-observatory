@@ -5,12 +5,9 @@ OSCAR Dependency Graph Observatory — Analytics Endpoints
 from fastapi import APIRouter, HTTPException, Depends
 from app.models.api import TopRiskResponse, CoverageResponse
 from app.graph.analytics import AnalyticsService
-from app.storage.json_storage import JSONStorage
+from app.storage.factory import get_storage
 
 router = APIRouter(tags=["Analytics"])
-
-def get_storage():
-    return JSONStorage(base_dir="data")
 
 def get_analytics_service(storage=Depends(get_storage)):
     return AnalyticsService(storage)
