@@ -14,6 +14,8 @@ export default function MethodExplorer() {
   const [searchTerm, setSearchTerm] = useState('');
   const [packageName, setPackageName] = useState('');
   const [packageVersion, setPackageVersion] = useState('');
+  const [excludeTests, setExcludeTests] = useState(true);
+  const [lastAnalyzed, setLastAnalyzed] = useState<{ slug: string; methodCount: number; fileCount: number } | null>(null);
   const queryClient = useQueryClient();
 
   const { data: projects, isLoading, error } = useQuery({
@@ -26,10 +28,16 @@ export default function MethodExplorer() {
       const { data } = await axios.post('http://localhost:8000/methods/analyze', {
         package_name: packageName,
         package_version: packageVersion,
+        exclude_tests: excludeTests,
       });
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setLastAnalyzed({
+        slug: data.project_slug,
+        methodCount: data.meta.method_count,
+        fileCount: data.meta.file_count,
+      });
       setPackageName('');
       setPackageVersion('');
       queryClient.invalidateQueries({ queryKey: ['method-projects'] });
@@ -106,88 +114,149 @@ export default function MethodExplorer() {
             </button>
           </div>
         </form>
+
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="excludeTests"
+            checked={excludeTests}
+            onChange={(e) => setExcludeTests(e.target.checked)}
+            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+            disabled={analyzeMutation.isPending}
+          />
+          <label htmlFor="excludeTests" className="text-sm text-gray-600 select-none cursor-pointer">
+            Exclude test files <span className="text-gray-400">(recommended — prevents test helper methods from skewing results)</span>
+          </label>
+        </div>
+
+        {lastAnalyzed && (
+          <div className="mt-4 p-3 bg-green-50 text-green-800 rounded-lg text-sm flex items-start gap-2 border border-green-200">
+            <span className="mt-0.5">✅</span>
+            <div>
+              <span className="font-semibold">{lastAnalyzed.slug}</span> analyzed — {lastAnalyzed.methodCount.toLocaleString()} methods across {lastAnalyzed.fileCount} files.
+              <span className="ml-2 text-green-600">It now appears in the project list below.</span>
+            </div>
+          </div>
+        )}
+
         {analyzeMutation.isError && (
           <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center">
             <AlertCircle className="w-4 h-4 mr-2" />
-            {(analyzeMutation.error as any)?.response?.data?.detail || analyzeMutation.error.message || 'Analysis failed. Check package name and version.'}
+            {(analyzeMutation.error as any)?.response?.data?.detail || (analyzeMutation.error as Error)?.message || 'Analysis failed. Check package name and version.'}
           </div>
         )}
       </div>
 
-      <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-gray-100 bg-slate-50 relative">
-          <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      {/* Project List */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+
+        {/* Search bar header */}
+        <div className="px-5 py-4 border-b border-gray-100 bg-slate-50 flex items-center gap-3">
+          <Search className="w-5 h-5 text-gray-400 shrink-0" />
           <input
             type="text"
-            placeholder="Search analyzed project slugs..."
+            placeholder="Search projects by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+            className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none"
           />
+          {filteredProjects.length > 0 && (
+            <span className="text-xs text-gray-400 font-medium shrink-0">
+              {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+        {/* Scrollable list */}
+        <div
+          className="overflow-y-scroll"
+          style={{ maxHeight: '480px', scrollbarWidth: 'auto', scrollbarColor: '#c7d2fe #f1f5f9' }}
+        >
+          {/* Loading */}
           {isLoading && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <div className="flex flex-col items-center justify-center py-24 text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-indigo-500" />
-              <p>Scanning registry for native runtimes...</p>
+              <p className="text-sm">Loading analyzed projects...</p>
             </div>
           )}
 
+          {/* Error */}
           {error && (
-            <div className="flex flex-col items-center justify-center h-full text-red-500">
+            <div className="flex flex-col items-center justify-center py-24 text-red-500">
               <AlertCircle className="w-10 h-10 mb-3" />
-              <p className="font-semibold px-4 text-center">Failed to fetch analyzed applications.</p>
+              <p className="font-semibold text-center">Failed to load projects.</p>
               <p className="text-xs text-red-400 mt-2 font-mono">{(error as any).message}</p>
             </div>
           )}
 
+          {/* Empty state */}
           {!isLoading && !error && filteredProjects.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <p className="text-lg font-medium">No active runtime instances bound.</p>
-              <p className="text-sm mt-1">Check your API search parameters or run local backend ingests.</p>
+            <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+              <p className="text-base font-medium">No projects found.</p>
+              <p className="text-sm mt-1">Try a different search term, or analyze your first package above.</p>
             </div>
           )}
 
+          {/* Project rows */}
           {!isLoading && !error && filteredProjects.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ul className="divide-y divide-gray-100">
               {filteredProjects.map((slug: string) => (
-                <div key={slug} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-indigo-600 transition-colors font-mono">{slug}</h3>
-                      <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold">Python Runtime</p>
-                    </div>
+                <li
+                  key={slug}
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-indigo-50/40 transition-colors group"
+                >
+                  {/* Icon */}
+                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-200 transition-colors">
+                    <span className="text-lg" role="img" aria-label="package">📦</span>
                   </div>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-100">
+
+                  {/* Slug + label */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 font-mono group-hover:text-indigo-700 transition-colors truncate">
+                      {slug}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5 uppercase tracking-wide font-medium">
+                      Python · AST Static Analysis
+                    </p>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 shrink-0">
                     <Link
                       to={`/methods/graph?project=${slug}`}
-                      className="flex items-center justify-center p-2 rounded-md bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-medium text-xs transition-colors border border-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 text-xs font-medium transition-all shadow-sm"
                     >
-                      <PlayCircle className="w-4 h-4 mr-1.5" />
+                      <PlayCircle className="w-3.5 h-3.5" />
                       Visualizer
                     </Link>
                     <Link
                       to={`/methods/hotspots?project=${slug}`}
-                      className="flex items-center justify-center p-2 rounded-md bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-medium text-xs transition-colors border border-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-rose-400 hover:text-rose-700 hover:bg-rose-50 text-xs font-medium transition-all shadow-sm"
                     >
-                      <BarChart3 className="w-4 h-4 mr-1.5" />
+                      <BarChart3 className="w-3.5 h-3.5" />
                       Hotspots
                     </Link>
                     <Link
                       to={`/methods/communities?project=${slug}`}
-                      className="flex items-center justify-center p-2 rounded-md bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-medium text-xs transition-colors border border-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 text-xs font-medium transition-all shadow-sm"
                     >
-                      <Users className="w-4 h-4 mr-1.5" />
+                      <Users className="w-3.5 h-3.5" />
                       Communities
                     </Link>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
+
+        {/* Footer hint if scrollable */}
+        {filteredProjects.length > 5 && (
+          <div className="px-5 py-2.5 bg-slate-50 border-t border-gray-100 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+            <span>↕</span>
+            <span>Scroll to see all {filteredProjects.length} projects</span>
+          </div>
+        )}
       </div>
     </div>
   );

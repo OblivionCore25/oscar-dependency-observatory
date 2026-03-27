@@ -14,7 +14,7 @@ class AnalyzeRequest(BaseModel):
     project_slug: str | None = None  # Optional: Short identifier (derived if not provided)
     package_name: str | None = None  # Optional: PyPI package name to download
     package_version: str | None = None # Optional: PyPI package version to download
-    exclude_tests: bool = False
+    exclude_tests: bool = True  # Default True: skip test files for cleaner metrics
 
 
 class AnalyzeSummaryResponse(BaseModel):
