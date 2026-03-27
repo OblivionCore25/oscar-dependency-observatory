@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { ArrowLeft, Loader2, AlertCircle, PlayCircle } from 'lucide-react';
 import MethodCallGraph from '../components/MethodCallGraph';
+import '@react-sigma/core/lib/style.css';
 
 const fetchGraph = async (slug: string) => {
   try {
@@ -23,11 +24,55 @@ export default function MethodGraphViewer() {
   const project = searchParams.get('project');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+  const [minComplexity, setMinComplexity] = useState<number>(0);
+  const [selectedCommunity, setSelectedCommunity] = useState<string>('all');
+  const [minConfidence, setMinConfidence] = useState<number>(0);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['method-graph', project],
     queryFn: () => fetchGraph(project!),
     enabled: !!project,
   });
+
+  const filteredData = useMemo(() => {
+    if (!data) return undefined;
+
+    // Filter nodes
+    const filteredNodes = data.nodes.filter((node: any) => {
+      const meetsComplexity = (node.complexity || 0) >= minComplexity;
+      const meetsCommunity = selectedCommunity === 'all' || String(node.community_id) === selectedCommunity;
+      return meetsComplexity && meetsCommunity;
+    });
+
+    const validNodeIds = new Set(filteredNodes.map((n: any) => n.id));
+
+    // Filter edges (must connect valid nodes AND meet confidence)
+    const filteredEdges = data.edges.filter((edge: any) => {
+      return (edge.confidence || 0) >= minConfidence &&
+             validNodeIds.has(edge.source_id) &&
+             validNodeIds.has(edge.target_id);
+    });
+
+    return {
+      ...data,
+      nodes: filteredNodes,
+      edges: filteredEdges,
+      node_count: filteredNodes.length,
+      edge_count: filteredEdges.length
+    };
+  }, [data, minComplexity, selectedCommunity, minConfidence]);
+
+  // Extract unique communities for the dropdown
+  const communities = useMemo(() => {
+    if (!data) return [];
+    const uniqueIds = new Set<string>();
+    data.nodes.forEach((n: any) => {
+      if (n.community_id !== undefined && n.community_id !== null) {
+        uniqueIds.add(String(n.community_id));
+      }
+    });
+    return Array.from(uniqueIds).sort((a, b) => Number(a) - Number(b));
+  }, [data]);
 
   const { data: blastRadiusData, isLoading: isLoadingBlastRadius } = useQuery({
     queryKey: ['method-blast-radius', project, selectedNodeId],
@@ -63,15 +108,58 @@ export default function MethodGraphViewer() {
           </div>
         </div>
         
-        {data && (
+        {filteredData && (
            <div className="flex items-center gap-3">
+             <div className="flex gap-4 mr-6 border-r border-gray-200 pr-6">
+                <div className="flex flex-col">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Min Complexity</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    value={minComplexity}
+                    onChange={(e) => setMinComplexity(Number(e.target.value))}
+                    className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-[10px] text-right text-gray-400 mt-1">{minComplexity}</span>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Min Confidence</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={minConfidence}
+                    onChange={(e) => setMinConfidence(Number(e.target.value))}
+                    className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-[10px] text-right text-gray-400 mt-1">{minConfidence}</span>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Community</label>
+                  <select
+                    value={selectedCommunity}
+                    onChange={(e) => setSelectedCommunity(e.target.value)}
+                    className="text-xs border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 h-6 py-0 px-2"
+                  >
+                    <option value="all">All</option>
+                    {communities.map(c => (
+                      <option key={c} value={c}>Cluster {c}</option>
+                    ))}
+                  </select>
+                </div>
+             </div>
+
              <div className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Nodes</span>
-               <span className="text-sm font-bold text-slate-800 font-mono">{data.node_count}</span>
+               <span className="text-sm font-bold text-slate-800 font-mono">{filteredData.node_count}</span>
              </div>
              <div className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Edges</span>
-               <span className="text-sm font-bold text-slate-800 font-mono">{data.edge_count}</span>
+               <span className="text-sm font-bold text-slate-800 font-mono">{filteredData.edge_count}</span>
              </div>
            </div>
         )}
@@ -111,8 +199,8 @@ export default function MethodGraphViewer() {
             </div>
           )}
 
-          {project && data && !isLoading && !error && (
-              <MethodCallGraph data={data} highlightedNodes={highlightedNodes} onNodeSelect={setSelectedNodeId} />
+          {project && filteredData && !isLoading && !error && (
+              <MethodCallGraph data={filteredData} highlightedNodes={highlightedNodes} onNodeSelect={setSelectedNodeId} />
           )}
         </div>
 
