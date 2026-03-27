@@ -5,13 +5,10 @@ OSCAR Dependency Graph Observatory — Export API Endpoints
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.storage.json_storage import JSONStorage
+from app.storage.factory import get_storage
 from app.exporters.graph_exporter import ExportService
 
 router = APIRouter(tags=["Export"])
-
-def get_storage():
-    return JSONStorage(base_dir="data")
 
 def get_export_service(storage=Depends(get_storage)):
     return ExportService(storage)
