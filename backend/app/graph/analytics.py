@@ -4,8 +4,10 @@ OSCAR Dependency Graph Observatory — Analytics Service
 Computes central metrics on the graph structure using flat files.
 """
 
+import logging
 from typing import List, Dict, Optional
 from collections import defaultdict
+import networkx as nx
 
 from app.storage import StorageService
 from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse, CoverageResponse
@@ -38,13 +40,54 @@ class AnalyticsService:
         
         bottleneck_score = float(fan_in * fan_out)
         
+        # Calculate Advanced Metrics for this specific package
+        G = nx.DiGraph()
+        for edge in all_edges:
+            G.add_edge(edge.source_package, edge.target_package)
+
+        page_rank = 0.0
+        closeness = 0.0
+        if G.number_of_nodes() > 0:
+            try:
+                page_rank = nx.pagerank(G, alpha=0.85).get(package_name, 0.0)
+            except nx.PowerIterationFailedConvergence:
+                pass
+
+            try:
+                closeness = nx.closeness_centrality(G).get(package_name, 0.0)
+            except Exception:
+                pass
+
+        # Diamond Dependency Detection
+        # Traverse the sub-graph from this package to count diamonds (reachable via multiple distinct paths)
+        diamond_count = 0
+        transitive_deps = 0
+        if fan_out > 0:
+            # We only look downstream
+            descendants = set()
+            try:
+                descendants = nx.descendants(G, package_name)
+                transitive_deps = len(descendants)
+
+                # A naive approach to diamonds: count nodes that have an in-degree > 1
+                # strictly within the subgraph originating from `package_name`
+                subgraph = G.subgraph(descendants | {package_name})
+                for node in descendants:
+                    # if a downstream node is reachable via multiple immediate parents in this subgraph, it's a diamond
+                    if subgraph.in_degree(node) > 1:
+                        diamond_count += 1
+            except nx.NetworkXError:
+                pass
+
         return PackageMetrics(
             directDependencies=fan_out,
-            transitiveDependencies=0,
+            transitiveDependencies=transitive_deps,
             fanIn=fan_in,
             fanOut=fan_out,
             bottleneckScore=bottleneck_score,
-            diamondCount=0
+            diamondCount=diamond_count,
+            pageRank=page_rank,
+            closenessCentrality=closeness
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
@@ -53,6 +96,9 @@ class AnalyticsService:
         """
         all_edges = self.storage.get_all_edges(ecosystem)
         
+        # Build NetworkX DiGraph for advanced metrics
+        G = nx.DiGraph()
+
         # fan_in: unique SOURCE PACKAGE NAMES that depend on a target (deduplicated across versions)
         fan_in_map: Dict[str, set] = defaultdict(set)
         # fan_out: number of dependencies each package declares (edge count across versions)
@@ -64,6 +110,9 @@ class AnalyticsService:
             fan_out_map[edge.source_package] += 1
             all_pkgs_map[edge.source_package] = edge.source_version
             
+            # Add to graph
+            G.add_edge(edge.source_package, edge.target_package)
+
         # Get actual versions for target packages from storage if available
         all_versions = self.storage.get_all_versions(ecosystem)
         latest_versions = {}
@@ -73,6 +122,22 @@ class AnalyticsService:
             
         # Union of all known packages (appear either as source or target)
         all_known_packages = set(fan_in_map.keys()) | set(fan_out_map.keys())
+
+        # Compute Advanced Metrics
+        pagerank_scores = {}
+        closeness_scores = {}
+        if G.number_of_nodes() > 0:
+            try:
+                pagerank_scores = nx.pagerank(G, alpha=0.85, max_iter=100)
+            except nx.PowerIterationFailedConvergence:
+                logging.getLogger(__name__).warning("PageRank failed to converge")
+
+            try:
+                # Note: Closeness centrality on directed graphs is based on incoming paths
+                # and can be expensive on very large graphs. In an MVP context with < 1M edges, it's generally okay.
+                closeness_scores = nx.closeness_centrality(G)
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Closeness Centrality failed: {e}")
             
         items = []
         for pkg in all_known_packages:
@@ -97,6 +162,8 @@ class AnalyticsService:
                     versionFanOut=version_fan_out,
                     bottleneckScore=bottleneck_score,
                     bottleneckPercentile=0.0,  # filled in below
+                    page_rank=pagerank_scores.get(pkg, 0.0),
+                    closeness_centrality=closeness_scores.get(pkg, 0.0),
                 )
             )
 

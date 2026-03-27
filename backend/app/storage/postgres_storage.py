@@ -5,9 +5,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 
-from app.models.domain import Package, Version, DependencyEdge
+import uuid
+from datetime import datetime, timezone
+
+from app.models.domain import Package, Version, DependencyEdge, Snapshot
 from app.storage import StorageService
-from app.storage.postgres_models import Base, PackageModel, VersionModel, DependencyEdgeModel
+from app.storage.postgres_models import Base, PackageModel, VersionModel, DependencyEdgeModel, SnapshotModel, SnapshotEdgeModel
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +159,69 @@ class PostgresStorage(StorageService):
                     resolved_target_version=e.resolved_target_version,
                     dependency_type=e.dependency_type,
                     ingestion_timestamp=e.ingestion_timestamp
+                ) for e in db_edges
+            ]
+
+    def create_snapshot(self, ecosystem: str, description: Optional[str] = None) -> Snapshot:
+        snapshot_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+
+        with self.SessionLocal() as session:
+            db_snapshot = SnapshotModel(
+                snapshot_id=snapshot_id,
+                ecosystem=ecosystem,
+                created_at=now,
+                description=description
+            )
+            session.add(db_snapshot)
+
+            db_edges = session.query(DependencyEdgeModel).filter_by(ecosystem=ecosystem).all()
+            for e in db_edges:
+                snap_edge = SnapshotEdgeModel(
+                    snapshot_id=snapshot_id,
+                    ecosystem=e.ecosystem,
+                    source_package=e.source_package,
+                    source_version=e.source_version,
+                    target_package=e.target_package,
+                    version_constraint=e.version_constraint
+                )
+                session.add(snap_edge)
+
+            session.commit()
+
+            return Snapshot(
+                snapshot_id=snapshot_id,
+                created_at=now,
+                ecosystem=ecosystem,
+                description=description
+            )
+
+    def list_snapshots(self, ecosystem: str) -> List[Snapshot]:
+        with self.SessionLocal() as session:
+            db_snapshots = session.query(SnapshotModel).filter_by(ecosystem=ecosystem).order_by(SnapshotModel.created_at.desc()).all()
+            return [
+                Snapshot(
+                    snapshot_id=s.snapshot_id,
+                    created_at=s.created_at,
+                    ecosystem=s.ecosystem,
+                    description=s.description
+                ) for s in db_snapshots
+            ]
+
+    def get_snapshot_edges(self, snapshot_id: str) -> List[DependencyEdge]:
+        with self.SessionLocal() as session:
+            db_edges = session.query(SnapshotEdgeModel).filter_by(snapshot_id=snapshot_id).all()
+            return [
+                DependencyEdge(
+                    ecosystem=e.ecosystem,
+                    source_package=e.source_package,
+                    source_version=e.source_version,
+                    target_package=e.target_package,
+                    version_constraint=e.version_constraint,
+                    # Provide defaults for fields not stored in snapshot
+                    resolved_target_version=None,
+                    dependency_type="runtime",
+                    ingestion_timestamp=datetime.now(timezone.utc)
                 ) for e in db_edges
             ]
 

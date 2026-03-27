@@ -47,6 +47,7 @@ app.add_middleware(
 from app.api.endpoints import router as dependencies_router
 from app.api.analytics import router as analytics_router
 from app.api.exports import router as exports_router
+from app.api.snapshots import router as snapshots_router
 
 # ─── Health Endpoint ────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ async def health_check() -> HealthResponse:
 app.include_router(dependencies_router)
 app.include_router(analytics_router)
 app.include_router(exports_router)
+app.include_router(snapshots_router)
 
 from app.method_observatory.api.router import router as method_router
 app.include_router(method_router)

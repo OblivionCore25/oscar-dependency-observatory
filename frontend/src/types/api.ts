@@ -41,6 +41,8 @@ export interface PackageMetrics {
   fanOut: number;
   bottleneckScore: number;
   diamondCount: number;
+  pageRank: number;
+  closenessCentrality: number;
 }
 
 export interface PackageDetailsResponse {
@@ -63,6 +65,8 @@ export interface TopRiskItem {
   versionFanOut: number;
   bottleneckScore: number;
   bottleneckPercentile: number;
+  pageRank: number;
+  closenessCentrality: number;
 }
 
 export interface TopRiskResponse {
@@ -77,4 +81,20 @@ export interface CoverageResponse {
   coveragePct: number;
 }
 
+// Snapshots -----------------------------------------------------------------
+
+export interface Snapshot {
+  snapshot_id: string;
+  created_at: string;
+  ecosystem: string;
+  description: string | null;
+}
+
+export interface SnapshotComparisonResponse {
+  snapshot_1_id: string;
+  snapshot_2_id: string;
+  ecosystem: string;
+  added_edges: number;
+  removed_edges: number;
+}
 

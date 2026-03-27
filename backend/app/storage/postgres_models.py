@@ -46,3 +46,22 @@ class DependencyEdgeModel(Base):
             name='uq_edge_eco_src_ver_tgt_type'
         ),
     )
+
+
+class SnapshotModel(Base):
+    __tablename__ = "snapshots"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id = Column(String, unique=True, nullable=False, index=True)
+    ecosystem = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    description = Column(String, nullable=True)
+
+class SnapshotEdgeModel(Base):
+    __tablename__ = "snapshot_edges"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id = Column(String, ForeignKey("snapshots.snapshot_id"), nullable=False, index=True)
+    ecosystem = Column(String, nullable=False)
+    source_package = Column(String, nullable=False)
+    source_version = Column(String, nullable=False)
+    target_package = Column(String, nullable=False)
+    version_constraint = Column(String, nullable=False)
