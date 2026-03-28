@@ -153,6 +153,22 @@ export default function PackageSearch() {
               <span className="text-gray-500 text-sm font-medium mb-1 block relative z-10">Bottleneck Score</span>
               <span className="text-3xl font-bold text-red-600 relative z-10">{data.metrics.bottleneckScore.toFixed(1)}</span>
             </div>
+
+            <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100 lg:col-span-2">
+              <span className="text-indigo-600 text-sm font-medium mb-1 block">Diamond Dependencies</span>
+              <span className="text-3xl font-bold text-indigo-900">{data.metrics.diamondCount}</span>
+              <span className="text-xs text-indigo-500 block mt-1">Downstream packages reachable via multiple distinct paths (potential resolution conflicts).</span>
+            </div>
+
+            <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+              <span className="text-emerald-600 text-sm font-medium mb-1 block">PageRank</span>
+              <span className="text-3xl font-bold text-emerald-900">{data.metrics.pageRank ? data.metrics.pageRank.toFixed(5) : '0.00000'}</span>
+            </div>
+
+            <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
+              <span className="text-teal-600 text-sm font-medium mb-1 block">Closeness Centrality</span>
+              <span className="text-3xl font-bold text-teal-900">{data.metrics.closenessCentrality ? data.metrics.closenessCentrality.toFixed(5) : '0.00000'}</span>
+            </div>
           </div>
         </div>
       )}

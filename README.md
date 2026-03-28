@@ -13,17 +13,14 @@ project:
 > **OSCAR — Open Supply-Chain Assurance & Resilience for Cloud-Native
 > Software Ecosystems**
 
-This module focuses on constructing and analyzing **directed dependency
-graphs** across software ecosystems (e.g., npm, PyPI) to identify:
+This module operates at **two resolutions**:
 
--   Transitive dependency relationships
--   High-impact (central) packages
--   Fragile dependency structures
--   Systemic risk concentrations
+1. **Package Level** — Constructs transitive dependency graphs across npm and PyPI ecosystems to identify high-impact packages, fragile structures, and systemic risk concentrations.
+2. **Method Level** — Analyzes the internal call graph of individual Python projects via static AST analysis to surface architectural hotspots, blast radii, and community clusters within a codebase.
 
 The goal is to provide a **data-driven, graph-based foundation** for
 understanding how vulnerabilities and failures can propagate across
-modern software supply chains.
+modern software supply chains — at both the ecosystem and code level.
 
 ------------------------------------------------------------------------
 
@@ -92,18 +89,16 @@ To ensure feasibility and reproducibility, the MVP is intentionally
 scoped:
 
 -   Focus on **package/version-level dependency graphs**
--   Initial support for:
-    -   npm
-    -   PyPI
+-   Initial support for npm and PyPI
 -   Deterministic ingestion and normalization
 -   Emphasis on **interpretable metrics**, not complex models
+-   **Method Observatory** — static AST-based call graph analysis for Python projects
 
 Future phases will extend into:
 
--   Code-level (method/function) dependency analysis
--   SBOM integration
--   Provenance and trust signals
+-   SBOM integration and provenance signals
 -   Chaos testing for supply-chain resilience
+-   Broader ecosystem coverage (Maven, Cargo, Go modules)
 
 ------------------------------------------------------------------------
 
@@ -113,64 +108,60 @@ Future phases will extend into:
 oscar-dependency-observatory/
 ├── backend/
 │   └── app/
-│       ├── api/                # FastAPI route handlers
-│       │   ├── endpoints.py    # Dependencies & package details endpoints
-│       │   ├── analytics.py    # Top-risk analytics endpoint
-│       │   └── exports.py      # JSON/CSV graph export endpoint
-│       ├── config/
-│       │   └── settings.py     # Environment-based configuration (OSCAR_ prefix)
-│       ├── exporters/
-│       │   └── graph_exporter.py  # JSON and CSV export logic
-│       ├── graph/
-│       │   ├── analytics.py    # Fan-in, fan-out, bottleneck score computation
-│       │   ├── direct.py       # Direct dependency service (with auto-ingest)
-│       │   └── transitive.py   # BFS transitive graph walker
-│       ├── ingestion/
-│       │   ├── npm.py          # npm registry connector (httpx)
-│       │   └── pypi.py         # PyPI registry connector (httpx)
-│       ├── models/
-│       │   ├── api.py          # Pydantic API response schemas
-│       │   └── domain.py       # Internal domain models (Package, Version, Edge)
-│       ├── normalization/
-│       │   ├── npm_normalizer.py   # npm JSON → domain model transform
-│       │   └── pypi_normalizer.py  # PyPI JSON → domain model transform (PEP 508)
-│       ├── storage/
-│       │   └── json_storage.py # Flat-file JSON storage implementation
-│       └── main.py             # FastAPI application entry point
+│       ├── api/                     # Package-level FastAPI route handlers
+│       ├── config/settings.py       # Environment-based configuration (OSCAR_ prefix)
+│       ├── exporters/               # JSON/CSV graph export logic
+│       ├── graph/                   # Fan-in, fan-out, bottleneck, BFS services
+│       ├── ingestion/               # npm + PyPI registry connectors (httpx)
+│       ├── models/                  # Pydantic domain + API schemas
+│       ├── normalization/           # Registry-specific data normalizers
+│       ├── storage/                 # JSON flat-file storage implementation
+│       ├── method_observatory/      # ★ Method-level analysis subsystem
+│       │   ├── api/router.py        # 10 REST endpoints under /methods
+│       │   ├── analysis/            # AST visitor, call resolver, graph builder,
+│       │   │                        #   symbol table, complexity, scope tracker
+│       │   ├── ingestion/           # Python file scanner + AST parser
+│       │   ├── metrics/             # Fan-in/out, centrality, Louvain, blast radius
+│       │   ├── models/              # MethodNode, CallEdge, AnalysisResult
+│       │   ├── services/            # AnalysisService (orchestrates full pipeline)
+│       │   └── storage/             # SQLite persistence (method_graph.db)
+│       └── main.py                  # FastAPI entry point — mounts 4 routers
 │
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── GraphCanvas.tsx     # Cytoscape.js graph visualization
-│       │   ├── Layout.tsx          # App shell with navigation
-│       │   └── TopRiskTable.tsx    # Top risk analytics table
-│       ├── hooks/
-│       │   ├── useAnalyticsQuery.ts  # React Query hook for top-risk
-│       │   ├── useGraphQuery.ts      # React Query hook for transitive graph
-│       │   └── usePackageQuery.ts    # React Query hook for package details
+│       │   ├── GraphCanvas.tsx      # Cytoscape.js — package dependency graphs
+│       │   ├── MethodCallGraph.tsx  # Sigma.js v3 WebGL — method call graphs
+│       │   ├── Layout.tsx           # App shell with sidebar navigation
+│       │   └── TopRiskTable.tsx     # Risk ranking table
+│       ├── hooks/                   # React Query hooks (graph, analytics, package)
 │       ├── pages/
-│       │   ├── GraphViewer.tsx    # Graph visualization page
-│       │   ├── PackageSearch.tsx  # Package search & details page
-│       │   └── TopRisk.tsx        # Top-risk analytics page
-│       ├── services/
-│       │   └── api.ts            # Axios API client
-│       ├── types/
-│       │   └── api.ts            # TypeScript API response interfaces
-│       ├── App.tsx               # Router and app layout
-│       ├── main.tsx              # React entry point
-│       └── index.css             # Global styles
+│       │   ├── PackageSearch.tsx    # Package search & ingestion
+│       │   ├── GraphViewer.tsx      # Package dependency visualization
+│       │   ├── TopRisk.tsx          # Ecosystem risk + Method Hotspots tabs
+│       │   ├── MethodExplorer.tsx   # Browse analyzed Python projects
+│       │   ├── MethodGraphViewer.tsx # Method call graph + detail panel
+│       │   ├── HotspotDashboard.tsx # Composite method risk table
+│       │   └── CommunityView.tsx    # Louvain cluster explorer
+│       ├── services/api.ts          # Axios API client
+│       ├── types/                   # TypeScript interfaces
+│       ├── App.tsx                  # Router — 7 routes
+│       └── main.tsx                 # React entry point
+│
+├── data/
+│   ├── npm/                         # Package-level flat-file data
+│   ├── pypi/
+│   └── method_observatory/
+│       └── method_graph.db          # SQLite database for method analysis
 │
 ├── docs/
-│   ├── technical-reference.md          # Comprehensive API & metrics reference
-│   ├── backend-implementation-guide.md # Backend architecture design doc
-│   ├── ui-implementation-guide.md      # Frontend architecture design doc
-│   ├── ui-plan.md                      # UI component specifications
-│   ├── knowledge-base/                 # Developer knowledge articles
-│   └── internal/                       # Internal process & roadmap docs
+│   ├── technical-reference.md       # Complete API, metrics, and architecture reference
+│   ├── knowledge-base/              # Developer-friendly concept explanations
+│   └── internal/                    # Internal design docs and roadmaps
 │
-├── CONTRIBUTING.md       # How to contribute
-├── LICENSE               # MIT License
-└── README.md             # This file
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
 ```
 
 ------------------------------------------------------------------------
@@ -215,14 +206,31 @@ curl http://localhost:8000/health
 
 ## 📡 API Endpoints
 
+### Package Level
+
 | Endpoint | Method | Description |
 |---|---|---|
 | `/health` | GET | Health check |
 | `/dependencies/{ecosystem}/{package}/{version}` | GET | Direct dependencies |
 | `/dependencies/{ecosystem}/{package}/{version}/transitive` | GET | Full transitive dependency graph (BFS) |
 | `/packages/{ecosystem}/{package}/{version}` | GET | Package details with computed metrics |
-| `/analytics/top-risk?ecosystem=npm&limit=10` | GET | Top risk packages ranked by bottleneck score |
-| `/export/{ecosystem}/graph?format=json` | GET | Full graph export (JSON or CSV) |
+| `/analytics/top-risk` | GET | Top risk packages ranked by bottleneck score |
+| `/export/{ecosystem}/graph` | GET | Full graph export (JSON or CSV) |
+
+### Method Observatory
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/methods/analyze` | POST | Analyze a Python project directory |
+| `/methods/projects` | GET | List all analyzed projects |
+| `/methods/{slug}` | GET | Analysis metadata for a project |
+| `/methods/{slug}/graph` | GET | Full method call graph export (JSON or CSV) |
+| `/methods/{slug}/top-risk` | GET | Methods ranked by bottleneck score |
+| `/methods/{slug}/hotspots` | GET | Methods ranked by composite risk (complexity × centrality × blast radius) |
+| `/methods/{slug}/communities` | GET | Methods grouped by Louvain community |
+| `/methods/{slug}/orphans` | GET | Uncalled methods (dead code candidates) |
+| `/methods/{slug}/method/{id}/blast-radius` | GET | Transitive downstream callee closure |
+| `/methods/{slug}/method/{id}` | GET | Full method detail (callers, callees, metrics) |
 
 See [docs/technical-reference.md](docs/technical-reference.md) for complete request/response schemas and metric formulas.
 
@@ -230,13 +238,25 @@ See [docs/technical-reference.md](docs/technical-reference.md) for complete requ
 
 ## 📊 Metrics
 
+### Package Level
+
 | Metric | Formula | Interpretation |
 |---|---|---|
-| **Fan-In** | Count of unique packages that depend on P | How widely adopted is this package? |
-| **Fan-Out** | Count of all dependency edges from P (across versions) | How many external risks does this package introduce? |
-| **Bottleneck Score** | `fan_in × fan_out` | How central is this package in the dependency highway? |
+| **Fan-In** | Unique packages depending on P | How widely adopted? |
+| **Fan-Out** | Dependency edges from all versions of P | How many external risks introduced? |
+| **Bottleneck Score** | `fan_in × fan_out` | Centrality proxy — high = critical junction |
 
-> Fan-in is **deduplicated by unique package name** — if `next` appears as a dependent 113 times across versions, it counts as 1.
+> Fan-in is **deduplicated by package name** — multiple versions of the same dependent count as 1.
+
+### Method Level
+
+| Metric | Description |
+|---|---|
+| **Complexity** | Cyclomatic complexity (control-flow branches) |
+| **Betweenness Centrality** | Fraction of call-graph shortest paths through this method |
+| **Blast Radius** | Transitive downstream methods affected if this one changes |
+| **Community ID** | Louvain cluster — methods that call each other frequently |
+| **Composite Risk** | `complexity × centrality × blast_radius` (used by Hotspots) |
 
 ------------------------------------------------------------------------
 
@@ -260,35 +280,38 @@ These datasets are intended for:
 
 | Document | Description |
 |---|---|
-| [Technical Reference](docs/technical-reference.md) | Complete API specs, metric formulas, data model, architecture |
+| [Technical Reference](docs/technical-reference.md) | Complete API specs, metric formulas, data models, architecture |
 | [Knowledge Base](docs/knowledge-base/README.md) | Developer-friendly explanations of key concepts |
-| [Backend Guide](docs/backend-implementation-guide.md) | Backend architecture design decisions |
-| [UI Guide](docs/ui-implementation-guide.md) | Frontend architecture and component design |
+| [Method Observatory API Guide](docs/knowledge-base/postman-testing-guide-method-observatory.md) | Postman/curl testing guide for Method Observatory endpoints |
 | [Contributing](CONTRIBUTING.md) | How to set up and contribute |
 
 ------------------------------------------------------------------------
 
 ## 🔜 Roadmap
 
-### Phase A (Current — MVP)
+### Phase A — Package Observatory ✅
 
 -   ✅ Dependency graph ingestion (npm + PyPI)
 -   ✅ Graph analytics (fan-in, fan-out, bottleneck score)
 -   ✅ Interactive web UI (graph viewer, package search, top risk)
 -   ✅ Dataset export (JSON + CSV)
--   🔲 Unit test coverage
--   🔲 SQLite storage migration ([roadmap](docs/internal/broader-ingestion-roadmap.md))
 
-### Phase B
+### Phase B — Method Observatory ✅
 
--   Code-level dependency mapping (methods/classes)
--   Language-specific analysis (Java, Python)
--   Broader dataset ingestion via seed crawling
+-   ✅ Static AST analysis pipeline for Python projects
+-   ✅ Method call graph construction + resolution
+-   ✅ Graph metrics: centrality, PageRank, Louvain communities, blast radius
+-   ✅ Interactive Sigma.js WebGL call graph viewer
+-   ✅ Hotspot dashboard (composite risk ranking)
+-   ✅ Community cluster exploration
+-   ✅ SQLite storage for method analysis results
 
-### Phase C
+### Phase C — Future
 
--   Unified multi-level graph (code + package + SBOM)
--   Advanced risk modeling (betweenness centrality, blast radius)
+-   🔲 Broader ecosystem coverage (Maven, Cargo, Go modules)
+-   🔲 Unified multi-level graph (code + package + SBOM)
+-   🔲 Temporal snapshots and risk drift detection
+-   🔲 CI/CD integration for continuous analysis
 
 ------------------------------------------------------------------------
 

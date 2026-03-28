@@ -1,7 +1,6 @@
 from fastapi.testclient import TestClient
 from app.main import app
-from app.api.endpoints import get_storage
-from app.api.analytics import get_storage as get_analytics_storage
+from app.storage.factory import get_storage
 from app.models.domain import Package, Version, DependencyEdge
 from app.storage.json_storage import JSONStorage
 import pytest
@@ -39,7 +38,6 @@ def mock_storage():
 def client(mock_storage):
     """Override the get_storage dependencies for both routers."""
     app.dependency_overrides[get_storage] = lambda: mock_storage
-    app.dependency_overrides[get_analytics_storage] = lambda: mock_storage
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -48,6 +46,8 @@ def client(mock_storage):
 def test_get_top_risk(client):
     """Test retrieving top-risk analytics sorting."""
     response = client.get("/analytics/top-risk?ecosystem=npm&limit=5")
+    if response.status_code != 200:
+        print("GET /analytics/top-risk error:", response.json())
     assert response.status_code == 200
     
     data = response.json()
@@ -69,6 +69,8 @@ def test_get_top_risk(client):
 def test_get_package_details(client):
     """Test retrieving metrics inside a single package details query."""
     response = client.get("/packages/npm/lodash/4.17.21")
+    if response.status_code != 200:
+        print("GET /packages/npm/lodash/4.17.21 error:", response.json())
     assert response.status_code == 200
     
     data = response.json()

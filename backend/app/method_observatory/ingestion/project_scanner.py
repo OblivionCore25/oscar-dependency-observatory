@@ -9,6 +9,9 @@ DEFAULT_EXCLUDE_DIRS = {
     "*.egg-info", ".mypy_cache", ".pytest_cache",
 }
 
+# Test-related filenames to exclude when exclude_tests=True
+TEST_FILE_NAMES = {"conftest.py", "fixtures.py"}
+
 @dataclass
 class ScanConfig:
     root_path: Path
@@ -33,13 +36,23 @@ def scan_project(config: ScanConfig) -> list[SourceFile]:
         dirs[:] = [d for d in dirs if d not in config.exclude_dirs]
         
         if config.exclude_tests:
-            dirs[:] = [d for d in dirs if d != "tests" and not d.endswith("_tests")]
+            dirs[:] = [
+                d for d in dirs
+                if d != "tests"
+                and not d.endswith("_tests")
+                and d != "test"
+                and not d.startswith("test_")
+            ]
 
         for file_name in files:
             if not file_name.endswith(".py"):
                 continue
-                
-            if config.exclude_tests and (file_name.startswith("test_") or file_name.endswith("_test.py")):
+
+            if config.exclude_tests and (
+                file_name.startswith("test_")
+                or file_name.endswith("_test.py")
+                or file_name in TEST_FILE_NAMES
+            ):
                 continue
 
             file_path = Path(root_dir) / file_name

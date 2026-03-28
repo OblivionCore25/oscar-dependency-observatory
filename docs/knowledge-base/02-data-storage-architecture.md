@@ -64,3 +64,36 @@ The rest of the app interacts only with the `StorageService` interface — meani
 | Works offline after first ingest | No query language or indexing |
 
 In a production system, `JSONStorage` would be replaced with a graph database like **Neo4j** or a relational store like **PostgreSQL**.
+
+---
+
+## Method Observatory: SQLite Storage
+
+The **Method Observatory** uses a separate **SQLite database** for method-level analysis results. This is a deliberate step up from flat files because method analysis produces relational, structured data that benefits from indexing and JOIN queries.
+
+**Location:** `data/method_observatory/method_graph.db`
+
+**Tables:**
+
+| Table | Contents |
+|---|---|
+| `analysis_runs` | One row per project analysis run (slug, timestamp, meta JSON) |
+| `methods` | One row per method with id, name, module, complexity, loc |
+| `calls` | One row per resolved call edge (source → target, confidence, call type) |
+| `method_metrics` | One row per method with fan-in/out, centrality, blast radius, community |
+| `auxiliary_data` | JSON blobs for classes, modules, imports, inheritance (for full reconstruct) |
+
+**Key design choices:**
+- `INSERT OR IGNORE` on `methods` and `method_metrics` — prevents crashes when a large package has duplicate method IDs across files
+- Re-analysis of a project deletes older rows (by slug) before inserting — keeps storage clean
+- The schema is initialized at startup via `CREATE TABLE IF NOT EXISTS`
+
+**Compared to the flat-file layer:**
+
+| | Flat-file (npm/PyPI) | SQLite (Method Observatory) |
+|---|---|---|
+| Setup | None | None (SQLite is stdlib) |
+| Query model | Read all files and filter in Python | SQL WHERE / GROUP BY |
+| Concurrent writes | Not safe | Safe (transaction-level) |
+| Inspection | Open any .json in an editor | `sqlite3 data/method_observatory/method_graph.db` |
+

@@ -10,9 +10,11 @@ router = APIRouter(prefix="/methods", tags=["Method Observatory"])
 # ── Request/Response schemas ──────────────────────────────────────────────── #
 
 class AnalyzeRequest(BaseModel):
-    project_path: str              # Absolute path on the analysis server's filesystem
-    project_slug: str              # Short identifier used in storage and URLs
-    exclude_tests: bool = False
+    project_path: str | None = None  # Optional: Absolute path on filesystem
+    project_slug: str | None = None  # Optional: Short identifier (derived if not provided)
+    package_name: str | None = None  # Optional: PyPI package name to download
+    package_version: str | None = None # Optional: PyPI package version to download
+    exclude_tests: bool = True  # Default True: skip test files for cleaner metrics
 
 
 class AnalyzeSummaryResponse(BaseModel):
@@ -41,25 +43,55 @@ def get_service() -> AnalysisService:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────── #
 
+import tempfile
+import shutil
+
+from ..ingestion.package_downloader import PackageDownloader
+
+
 @router.post("/analyze", response_model=AnalyzeSummaryResponse)
 async def analyze_project(request: AnalyzeRequest, service: AnalysisService = Depends(get_service)):
     """
     Trigger analysis of a Python project directory.
+    Can either use an existing local path or automatically download a package from PyPI.
     Runs the full ingestion → AST parsing → call resolution → metrics pipeline.
     Returns a summary with top-risk methods on completion.
     """
+    if not request.project_path and not (request.package_name and request.package_version):
+        raise HTTPException(status_code=400, detail="Must provide either project_path or both package_name and package_version")
+
+    project_slug = request.project_slug
+    if not project_slug:
+        if request.package_name and request.package_version:
+            project_slug = f"{request.package_name}-{request.package_version}"
+        else:
+             project_slug = Path(request.project_path).name
+
+    temp_dir = None
     try:
+        project_path = request.project_path
+        if not project_path:
+            temp_dir = tempfile.mkdtemp(prefix="oscar_method_download_")
+            downloader = PackageDownloader()
+            extracted_path = await downloader.download_and_extract(
+                request.package_name, request.package_version, Path(temp_dir)
+            )
+            project_path = str(extracted_path)
+
         result = service.analyze(
-            project_path=request.project_path,
-            project_slug=request.project_slug,
+            project_path=project_path,
+            project_slug=project_slug,
             exclude_tests=request.exclude_tests,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_dir and Path(temp_dir).exists():
+            shutil.rmtree(temp_dir)
 
     top_risk = sorted(result.metrics, key=lambda m: m.bottleneck_score, reverse=True)[:10]
     return AnalyzeSummaryResponse(
-        project_slug=request.project_slug,
+        project_slug=project_slug,
         meta=result.meta,
         top_risk=top_risk,
     )

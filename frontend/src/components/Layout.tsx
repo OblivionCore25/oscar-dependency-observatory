@@ -56,6 +56,18 @@ export function Layout({ children }: LayoutProps) {
             Top Risk
           </NavLink>
 
+          <NavLink
+            to="/snapshots"
+            className={({ isActive }) =>
+              `flex items-center px-4 py-3 rounded-md transition-colors ${
+                isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+              }`
+            }
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 mr-3 lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+            Snapshots
+          </NavLink>
+
           <NavLink 
             to="/methods" 
             className={({ isActive }) => 
