@@ -1,0 +1,314 @@
+
+ RUN  v3.2.4 /Users/fabiangonzalez/Documents/oscar-dependency-observatory/oscar-dependency-observatory/frontend
+
+ ❯ src/pages/HotspotDashboard.test.tsx (4 tests | 1 failed) 1056ms
+   ✓ HotspotDashboard > renders No Project Selected when missing project param 18ms
+   ✓ HotspotDashboard > fetches and renders hotspots when project param is present 17ms
+   ✓ HotspotDashboard > handles limits error state 7ms
+   × HotspotDashboard > handles hotspot fetch error state and retry click 1014ms
+     → Unable to find an element with the text: /Failed to load hotspots/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col h-full bg-slate-50"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-center"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"mr-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-arrow-left w-5 h-5"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m12 19-7-7 7-7"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M19 12H5"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+          [36m<div>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"text-xl font-bold text-gray-900 flex items-center"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-chart-column w-6 h-6 text-rose-500 mr-2"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M3 3v16a2 2 0 0 0 2 2h16"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M18 17V9"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M13 17V5"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M8 17v-3"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [0mMethod Hotspots[0m
+            [36m</h1>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm text-gray-500 font-mono mt-0.5"[39m
+            [36m>[39m
+              [0merror-hotspots[0m
+            [36m</p>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</header>[39m
+      [36m<main[39m
+        [33mclass[39m=[32m"flex-1 overflow-y-auto p-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"max-w-6xl mx-auto space-y-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"bg-white p-6 rounded-xl border border-gray-200 shadow-sm"[39m
+          [36m>[39m
+            [36m<h2[39m
+              [33mclass[39m=[32m"text-lg font-bold text-gray-800 mb-2"[39m
+            [36m>[39m
+              [0mComposite Risk Architecture[0m
+            [36m</h2>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-sm text-gray-600 max-w-3xl"[39m
+            [36m>[39m
+              [0mMethods designated as hotspots sit at critical junctions within the application. Their risk score is calculated via [0m
+              [36m<code[39m
+                [33mclass[39m=[32m"bg-slate-100 px-1 py-0.5 rounded text-rose-600"[39m
+              [36m>[39m
+                [0mComplexity × Centrality × Blast Radius[0m
+              [36m</code>[39m
+              [0m. Refactoring these limits structural coupling constraints.[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"bg-red-50 border border-red-200 p-6 rounded-xl text-center"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-circle-alert w-8 h-8 text-red-500 mx-auto mb-3"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"10"[39m
+              [36m/>[39m
+              [36m<line[39m
+                [33mx1[39m=[32m"12"[39m
+                [33mx2[39m=[32m"12"[39m
+                [33my1[39m=[32m"8"[39m
+                [33my2[39m=[32m"12"[39m
+              [36m/>[39m
+              [36m<line[39m
+                [33mx1[39m=[32m"12"[39m
+                [33mx2[39m=[32m"12.01"[39m
+                [33my1[39m=[32m"16"[39m
+                [33my2[39m=[32m"16"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-red-700 font-medium"[39m
+            [36m>[39m
+              [0mFailed to compute hotspot limits.[0m
+            [36m</p>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</main>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-col h-full bg-slate-50"[39m
+      [36m>[39m
+        [36m<header[39m
+          [33mclass[39m=[32m"bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"mr-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-arrow-left w-5 h-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m12 19-7-7 7-7"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M19 12H5"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</button>[39m
+            [36m<div>[39m
+              [36m<h1[39m
+                [33mclass[39m=[32m"text-xl font-bold text-gray-900 flex items-center"[39m
+              [36m>[39m
+                [36m<svg[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"lucide lucide-chart-column w-6 h-6 text-rose-500 mr-2"[39m
+                  [33mfill[39m=[32m"none"[39m
+                  [33mheight[39m=[32m"24"[39m
+                  [33mstroke[39m=[32m"currentColor"[39m
+                  [33mstroke-linecap[39m=[32m"round"[39m
+                  [33mstroke-linejoin[39m=[32m"round"[39m
+                  [33mstroke-width[39m=[32m"2"[39m
+                  [33mviewBox[39m=[32m"0 0 24 24"[39m
+                  [33mwidth[39m=[32m"24"[39m
+                  [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                [36m>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M3 3v16a2 2 0 0 0 2 2h16"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M18 17V9"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M13 17V5"[39m
+                  [36m/>[39m
+                  [36m<path[39m
+                    [33md[39m=[32m"M8 17v-3"[39m
+                  [36m/>[39m
+                [36m</svg>[39m
+                [0mMethod Hotspots[0m
+              [36m</h1>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-sm text-gray-500 font-mono mt-0.5"[39m
+              [36m>[39m
+                [0merror-hotspots[0m
+              [36m</p>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</header>[39m
+        [36m<main[39m
+          [33mclass[39m=[32m"flex-1 overflow-y-auto p-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"max-w-6xl mx-auto space-y-6"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"bg-white p-6 rounded-xl border border-gray-200 shadow-sm"[39m
+            [36m>[39m
+              [36m<h2[39m
+                [33mclass[39m=[32m"text-lg font-bold text-gray-800 mb-2"[39m
+              [36m>[39m
+                [0mComposite Risk Architecture[0m
+              [36m</h2>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-sm text-gray-600 max-w-3xl"[39m
+              [36m>[39m
+                [0mMethods designated as hotspots sit at critical junctions within the application. Their risk score is calculated via [0m
+                [36m<code[39m
+                  [33mclass[39m=[32m"bg-slate-100 px-1 py-0.5 rounded text-rose-600"[39m
+                [36m>[39m
+                  [0mComplexity × Centrality × Blast Radius[0m
+                [36m</code>[39m
+                [0m. Refactoring these limits structural coupling constraints.[0m
+              [36m</p>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"bg-red-50 border border-red-200 p-6 rounded-xl text-center"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-circle-alert w-8 h-8 text-red-500 mx-auto mb-3"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<circle[39m
+                  [33mcx[39m=[32m"12"[39m
+                  [33mcy[39m=[32m"12"[39m
+                  [33mr[39m=[32m"10"[39m
+                [36m/>[39m
+                [36m<line[39m
+                  [33mx1[39m=[32m"12"[39m
+                  [33mx2[39m=[32m"12"[39m
+                  [33my1[39m=[32m"8"[39m
+                  [33my2[39m=[32m"12"[39m
+                [36m/>[39m
+                [36m<line[39m
+                  [33mx1[39m=[32m"12"[39m
+                  [33mx2[39m=[32m"12.01"[39m
+                  [33my1[39m=[32m"16"[39m
+                  [33my2[39m=[32m"16"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-red-700 font-medium"[39m
+              [36m>[39m
+                [0mFailed to compute hotspot limits.[0m
+              [36m</p>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</main>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  01:00:34
+   Duration  1.71s (transform 38ms, setup 81ms, collect 109ms, tests 1.06s, environment 300ms, prepare 42ms)
+

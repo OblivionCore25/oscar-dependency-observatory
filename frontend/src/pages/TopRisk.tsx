@@ -113,8 +113,8 @@ export default function TopRisk() {
                       />
                     </div>
                     <div className="flex justify-between text-[11px] text-gray-400">
-                      <span>{coverage.ingestedPackages.toLocaleString()} packages ingested</span>
-                      <span>est. {(coverage.estimatedTotal / 1_000_000).toFixed(1)}M total in {coverage.ecosystem.toUpperCase()}</span>
+                      <span>{(coverage.ingestedPackages || 0).toLocaleString()} packages ingested</span>
+                      <span>est. {((coverage.estimatedTotal || 0) / 1_000_000).toFixed(1)}M total in {(coverage.ecosystem || '').toUpperCase()}</span>
                     </div>
                   </div>
 
