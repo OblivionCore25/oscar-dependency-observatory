@@ -54,8 +54,8 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
                 <span className="font-normal text-gray-400 lowercase ml-1">(percentile rank)</span>
               </th>
               <th className="px-6 py-4 text-right">Fan-In <span className="font-normal text-gray-400 lowercase">(Ecosystem)</span></th>
-              <th className="px-6 py-4 text-right">Fan-Out</th>
-              <th className="px-6 py-4 text-right">PageRank / Closeness</th>
+              <th className="px-6 py-4 text-right">Blast Radius</th>
+              <th className="px-6 py-4 text-right">Centrality <span className="font-normal text-gray-400 lowercase">(PR / BW)</span></th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -104,29 +104,23 @@ export default function TopRiskTable({ items }: TopRiskTableProps) {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right tabular-nums">
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-700">{item.fanOut.toLocaleString()}</span>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">All Vers.</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500 font-medium">{item.versionFanOut.toLocaleString()}</span>
-                        <span className="text-[10px] text-blue-500/80 bg-blue-50 px-1.5 py-0.5 rounded font-mono">v{item.version}</span>
-                      </div>
+                    <div className="flex items-center justify-end gap-2 text-fuchsia-700">
+                      <span className="text-lg font-bold">{item.blastRadius || 0}</span>
+                      <span className="text-[10px] text-fuchsia-400 uppercase tracking-wider hidden sm:inline">Transitive</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right tabular-nums">
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-2" title="PageRank">
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">PR:</span>
-                        <span className="text-blue-700 font-medium bg-blue-50 px-2 py-0.5 rounded">
+                        <span className="text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded">
                           {item.pageRank ? item.pageRank.toFixed(5) : '0.00000'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2" title="Closeness Centrality">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">CC:</span>
-                        <span className="text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded">
-                          {item.closenessCentrality ? item.closenessCentrality.toFixed(5) : '0.00000'}
+                      <div className="flex items-center gap-2" title="Betweenness Centrality">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">BW:</span>
+                        <span className="text-teal-700 font-medium bg-teal-50 px-2 py-0.5 rounded">
+                          {item.betweennessCentrality ? item.betweennessCentrality.toFixed(5) : '0.00000'}
                         </span>
                       </div>
                     </div>
