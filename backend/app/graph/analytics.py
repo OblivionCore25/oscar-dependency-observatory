@@ -47,6 +47,9 @@ class AnalyticsService:
 
         page_rank = 0.0
         closeness = 0.0
+        betweenness = 0.0
+        blast_radius = 0
+
         if G.number_of_nodes() > 0:
             try:
                 page_rank = nx.pagerank(G, alpha=0.85).get(package_name, 0.0)
@@ -58,12 +61,30 @@ class AnalyticsService:
             except Exception:
                 pass
 
+            try:
+                # Approximate betweenness centrality for performance, using k=min(nodes, 50)
+                # This measures the package's role as a bridge between different sub-ecosystems.
+                k = min(G.number_of_nodes(), 50)
+                betweenness_dict = nx.betweenness_centrality(G, k=k)
+                betweenness = betweenness_dict.get(package_name, 0.0)
+            except Exception:
+                pass
+
+            try:
+                # Blast Radius: The number of unique packages that transitively depend on this package.
+                # In a directed dependency graph A -> B, descendants(G, B) are NOT A.
+                # To find dependents, we need the reverse graph or to use ancestors.
+                blast_radius_nodes = nx.ancestors(G, package_name)
+                blast_radius = len(blast_radius_nodes)
+            except Exception:
+                pass
+
         # Diamond Dependency Detection
         # Traverse the sub-graph from this package to count diamonds (reachable via multiple distinct paths)
         diamond_count = 0
         transitive_deps = 0
         if fan_out > 0:
-            # We only look downstream
+            # We only look downstream (what this package depends on)
             descendants = set()
             try:
                 descendants = nx.descendants(G, package_name)
@@ -87,7 +108,9 @@ class AnalyticsService:
             bottleneckScore=bottleneck_score,
             diamondCount=diamond_count,
             pageRank=page_rank,
-            closenessCentrality=closeness
+            closenessCentrality=closeness,
+            betweennessCentrality=betweenness,
+            blastRadius=blast_radius
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
@@ -126,6 +149,8 @@ class AnalyticsService:
         # Compute Advanced Metrics
         pagerank_scores = {}
         closeness_scores = {}
+        betweenness_scores = {}
+
         if G.number_of_nodes() > 0:
             try:
                 pagerank_scores = nx.pagerank(G, alpha=0.85, max_iter=100)
@@ -138,6 +163,12 @@ class AnalyticsService:
                 closeness_scores = nx.closeness_centrality(G)
             except Exception as e:
                 logging.getLogger(__name__).warning(f"Closeness Centrality failed: {e}")
+
+            try:
+                k = min(G.number_of_nodes(), 50)
+                betweenness_scores = nx.betweenness_centrality(G, k=k)
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Betweenness Centrality failed: {e}")
             
         items = []
         for pkg in all_known_packages:
@@ -164,6 +195,8 @@ class AnalyticsService:
                     bottleneckPercentile=0.0,  # filled in below
                     page_rank=pagerank_scores.get(pkg, 0.0),
                     closeness_centrality=closeness_scores.get(pkg, 0.0),
+                    betweenness_centrality=betweenness_scores.get(pkg, 0.0),
+                    blast_radius=len(nx.ancestors(G, pkg)) if G.has_node(pkg) else 0,
                 )
             )
 
