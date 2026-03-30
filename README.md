@@ -179,11 +179,12 @@ oscar-dependency-observatory/
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install fastapi uvicorn pydantic pydantic-settings httpx
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The API server starts at `http://localhost:8000`. Swagger docs are available at `http://localhost:8000/docs`.
+The API server starts at `http://localhost:8000`.  
+Interactive Swagger docs: `http://localhost:8000/docs`
 
 ### 2. Start the Frontend (React + Vite)
 
@@ -193,7 +194,7 @@ npm install
 npm run dev
 ```
 
-The web UI starts at `http://localhost:5173` and proxies API calls to the backend automatically.
+The web UI starts at `http://localhost:5173`.
 
 ### 3. Verify
 
@@ -202,61 +203,112 @@ curl http://localhost:8000/health
 # → {"status":"ok"}
 ```
 
+### 4. Run Frontend Tests
+
+```bash
+cd frontend
+npx vitest run --coverage
+# ≥90% branch coverage enforced by vitest.config.ts
+```
+
 ------------------------------------------------------------------------
 
 ## 📡 API Endpoints
 
-### Package Level
+All endpoints are served from `http://localhost:8000`. Full schemas are available at `/docs`.
+
+### System
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/health` | GET | Health check |
-| `/dependencies/{ecosystem}/{package}/{version}` | GET | Direct dependencies |
-| `/dependencies/{ecosystem}/{package}/{version}/transitive` | GET | Full transitive dependency graph (BFS) |
-| `/packages/{ecosystem}/{package}/{version}` | GET | Package details with computed metrics |
-| `/analytics/top-risk` | GET | Top risk packages ranked by bottleneck score |
-| `/export/{ecosystem}/graph` | GET | Full graph export (JSON or CSV) |
+| `/health` | GET | Health check — returns `{"status": "ok"}` |
+
+---
+
+### Package Observatory
+
+| Endpoint | Method | Query Params | Description |
+|---|---|---|---|
+| `/packages/{ecosystem}/{package}/{version}` | GET | — | Package details + full metric set. Auto-ingests if not cached. |
+| `/dependencies/{ecosystem}/{package}/{version}` | GET | — | Direct (immediate) dependencies |
+| `/dependencies/{ecosystem}/{package}/{version}/transitive` | GET | — | Full transitive dependency graph (BFS) |
+| `/analytics/top-risk` | GET | `ecosystem`, `limit` | Packages ranked by bottleneck score with percentile |
+| `/analytics/coverage` | GET | `ecosystem` | Ingestion coverage vs. estimated ecosystem size |
+| `/export/{ecosystem}/graph` | GET | `format=json\|csv\|graphml` | Raw graph export for downstream analysis |
+
+**Supported ecosystems:** `npm`, `pypi`
+
+---
+
+### Temporal Snapshots
+
+| Endpoint | Method | Body / Params | Description |
+|---|---|---|---|
+| `/snapshots/{ecosystem}` | POST | `{"description": "..."}` (optional) | Capture current graph state as a named snapshot |
+| `/snapshots/{ecosystem}` | GET | — | List all snapshots for the ecosystem |
+| `/snapshots/{ecosystem}/compare` | GET | `snapshot_1`, `snapshot_2` | Count added/removed edges between two snapshots |
+
+---
 
 ### Method Observatory
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/methods/analyze` | POST | Analyze a Python project directory |
-| `/methods/projects` | GET | List all analyzed projects |
-| `/methods/{slug}` | GET | Analysis metadata for a project |
-| `/methods/{slug}/graph` | GET | Full method call graph export (JSON or CSV) |
-| `/methods/{slug}/top-risk` | GET | Methods ranked by bottleneck score |
-| `/methods/{slug}/hotspots` | GET | Methods ranked by composite risk (complexity × centrality × blast radius) |
-| `/methods/{slug}/communities` | GET | Methods grouped by Louvain community |
-| `/methods/{slug}/orphans` | GET | Uncalled methods (dead code candidates) |
-| `/methods/{slug}/method/{id}/blast-radius` | GET | Transitive downstream callee closure |
-| `/methods/{slug}/method/{id}` | GET | Full method detail (callers, callees, metrics) |
-
-See [docs/technical-reference.md](docs/technical-reference.md) for complete request/response schemas and metric formulas.
+| Endpoint | Method | Query Params / Body | Description |
+|---|---|---|---|
+| `/methods/analyze` | POST | `{package_name, package_version, exclude_tests}` | Download package from PyPI, run full AST analysis pipeline |
+| `/methods/projects` | GET | — | List all analyzed project slugs |
+| `/methods/{slug}` | GET | — | Analysis metadata (file count, method count, resolution rate, etc.) |
+| `/methods/{slug}/graph` | GET | `format=json\|csv`, `min_confidence` | Full method call graph export |
+| `/methods/{slug}/top-risk` | GET | `limit` | Methods ranked by bottleneck score (`fan_in × fan_out`) |
+| `/methods/{slug}/hotspots` | GET | `limit` | Methods ranked by composite risk (`complexity × centrality × blast_radius`) |
+| `/methods/{slug}/communities` | GET | — | Methods grouped by Louvain community cluster |
+| `/methods/{slug}/orphans` | GET | — | Methods with `fan_in = 0` (dead code candidates) |
+| `/methods/{slug}/method/{id}` | GET | — | Full method detail: metrics, callers, callees |
+| `/methods/{slug}/method/{id}/blast-radius` | GET | — | Transitive callee closure subgraph for a specific method |
 
 ------------------------------------------------------------------------
 
 ## 📊 Metrics
 
-### Package Level
+### Package-Level Metrics
 
-| Metric | Formula | Interpretation |
+Returned by `/packages/{ecosystem}/{package}/{version}` and `/analytics/top-risk`.
+
+| Metric | Formula / Source | Interpretation |
 |---|---|---|
-| **Fan-In** | Unique packages depending on P | How widely adopted? |
-| **Fan-Out** | Dependency edges from all versions of P | How many external risks introduced? |
-| **Bottleneck Score** | `fan_in × fan_out` | Centrality proxy — high = critical junction |
+| **Fan-In** | Unique package *names* depending on P (deduped across versions) | How widely adopted is this package? |
+| **Fan-Out** | Dependency edges from this package version | How many external risks does this package introduce? |
+| **Bottleneck Score** | `fan_in × fan_out` | High = critical junction in the ecosystem graph |
+| **Bottleneck Percentile** | Rank position vs. all ingested packages (0–100) | Where does this package sit in the risk distribution? |
+| **PageRank** | Google PageRank (α=0.85) on the full dependency graph | Recursive importance — accounts for who depends on your dependents |
+| **Betweenness Centrality** | Fraction of shortest paths between all pairs passing through P (sampled k=50) | Bridge role between sub-ecosystems |
+| **Closeness Centrality** | Inverse average shortest-path distance to all reachable nodes | How quickly can a failure in P spread? |
+| **Blast Radius** | `len(ancestors(G, P))` — unique packages that transitively depend on P | How many packages are exposed if P is compromised? |
+| **Diamond Count** | Downstream nodes reachable via >1 distinct path | Potential version resolution conflicts |
 
-> Fan-in is **deduplicated by package name** — multiple versions of the same dependent count as 1.
+> Fan-in is **deduplicated by package name** — react@18.0 and react@18.1 as dependents count as one unique dependent.
 
-### Method Level
+### Method-Level Metrics
 
-| Metric | Description |
-|---|---|
-| **Complexity** | Cyclomatic complexity (control-flow branches) |
-| **Betweenness Centrality** | Fraction of call-graph shortest paths through this method |
-| **Blast Radius** | Transitive downstream methods affected if this one changes |
-| **Community ID** | Louvain cluster — methods that call each other frequently |
-| **Composite Risk** | `complexity × centrality × blast_radius` (used by Hotspots) |
+Returned by `/methods/{slug}/hotspots`, `/methods/{slug}/graph`, and `/methods/{slug}/method/{id}`.
+
+| Metric | Description | UI Visible? |
+|---|---|---|
+| **Cyclomatic Complexity** | McCabe control-flow branch count | ✅ HotspotDashboard, MethodGraphViewer panel |
+| **Fan-In** | Internal callers within the project | ✅ MethodGraphViewer panel |
+| **Fan-Out** | Internal callees within the project | ✅ MethodGraphViewer panel |
+| **Fan-Out External** | Calls to functions outside the project | API only † |
+| **Bottleneck Score** | `fan_in × fan_out` | API only (used for `/top-risk` ranking) |
+| **Betweenness Centrality** | Fraction of call-graph shortest paths through this method | ✅ HotspotDashboard, MethodGraphViewer panel |
+| **Blast Radius** | Transitive downstream callees affected by a change to this method | ✅ HotspotDashboard, MethodGraphViewer panel |
+| **Community ID** | Louvain cluster assignment | ✅ CommunityView, MethodGraphViewer panel |
+| **Composite Risk** | `complexity × betweenness_centrality × blast_radius` | ✅ HotspotDashboard (Risk Score column) |
+| **PageRank** | Method-level recursive importance propagation | API only † |
+| **LOC** | Physical lines of code in the method body | API only † |
+| **Is Orphan** | `fan_in = 0` and not an entry point — dead code candidate | API only (via `/orphans` endpoint) † |
+| **Is Leaf** | `fan_out = 0` — terminal method with no internal callees | API only † |
+| **Resolution Rate** | `resolved_calls / total_calls` — confidence of static analysis | ✅ Analysis metadata |
+
+> † *Available via REST API; UI visualization planned for v1.1.*
 
 ------------------------------------------------------------------------
 
@@ -291,27 +343,41 @@ These datasets are intended for:
 
 ### Phase A — Package Observatory ✅
 
--   ✅ Dependency graph ingestion (npm + PyPI)
--   ✅ Graph analytics (fan-in, fan-out, bottleneck score)
--   ✅ Interactive web UI (graph viewer, package search, top risk)
--   ✅ Dataset export (JSON + CSV)
+- ✅ Dependency graph ingestion (npm + PyPI)
+- ✅ Graph analytics (fan-in, fan-out, bottleneck score, PageRank, betweenness, closeness, blast radius, diamond count)
+- ✅ Bottleneck percentile ranking across all ingested packages
+- ✅ Interactive web UI (graph viewer, package search, top risk table)
+- ✅ Dataset export (JSON / CSV / GraphML)
+- ✅ Temporal snapshots & edge-delta comparison
 
 ### Phase B — Method Observatory ✅
 
--   ✅ Static AST analysis pipeline for Python projects
--   ✅ Method call graph construction + resolution
--   ✅ Graph metrics: centrality, PageRank, Louvain communities, blast radius
--   ✅ Interactive Sigma.js WebGL call graph viewer
--   ✅ Hotspot dashboard (composite risk ranking)
--   ✅ Community cluster exploration
--   ✅ SQLite storage for method analysis results
+- ✅ Automated PyPI package download and extraction
+- ✅ Static AST analysis pipeline (functions, classes, modules, imports, inheritance)
+- ✅ Method call graph construction with confidence scoring
+- ✅ Graph metrics: betweenness centrality, PageRank, Louvain communities, blast radius
+- ✅ Interactive Sigma.js WebGL call graph viewer with node detail panel
+- ✅ Hotspot dashboard (composite risk ranking)
+- ✅ Community cluster explorer (Louvain detection)
+- ✅ Orphan detection (dead code candidates)
+- ✅ Per-method blast radius traversal
+- ✅ SQLite persistence (`method_graph.db`)
 
-### Phase C — Future
+### Phase C — Quality & Testing ✅
 
--   🔲 Broader ecosystem coverage (Maven, Cargo, Go modules)
--   🔲 Unified multi-level graph (code + package + SBOM)
--   🔲 Temporal snapshots and risk drift detection
--   🔲 CI/CD integration for continuous analysis
+- ✅ Vitest + React Testing Library test suite
+- ✅ ≥90% branch coverage enforced via `vitest.config.ts` thresholds
+- ✅ 99%+ statement coverage across all frontend pages, components, and hooks
+
+### Phase D — Future
+
+- 🔲 OSV.dev vulnerability enrichment → `vuln_weighted_risk` score
+- 🔲 Broader ecosystem coverage (Maven, Cargo, Go modules)
+- 🔲 Scheduled automated snapshots with drift alerting
+- 🔲 Cross-version method metric tracking
+- 🔲 GitHub / CI integration (risk reports as PR comments)
+- 🔲 Unified multi-level graph (code + package + SBOM)
+- 🔲 Supply chain attack simulation via blast radius propagation
 
 ------------------------------------------------------------------------
 
