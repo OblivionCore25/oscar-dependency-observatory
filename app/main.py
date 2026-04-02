@@ -69,8 +69,6 @@ app.include_router(dependencies_router)
 app.include_router(analytics_router)
 app.include_router(exports_router)
 
-from app.method_observatory.api.router import router as method_router
-app.include_router(method_router)
 
 
 from contextlib import asynccontextmanager
