@@ -7,18 +7,11 @@ from fastapi.responses import StreamingResponse
 import json
 from app.models.api import DirectDependenciesResponse, TransitiveDependenciesResponse
 from app.graph.direct import DirectDependencyService
-from app.storage.json_storage import JSONStorage
+from app.storage.factory import get_storage
 from app.ingestion.npm import PackageNotFoundError
 
 router = APIRouter(tags=["Dependencies"])
 
-# Dependency Injection for the API
-def get_storage():
-    from app.config.settings import settings
-    if settings.storage_mode == "postgres":
-        from app.storage.pg_storage import PgStorage
-        return PgStorage(database_url=settings.database_url)
-    return JSONStorage(base_dir=settings.data_directory)
 
 def get_direct_dependency_service(storage=Depends(get_storage)):
     return DirectDependencyService(storage)
