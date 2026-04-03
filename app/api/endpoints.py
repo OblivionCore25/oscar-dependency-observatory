@@ -3,6 +3,8 @@ OSCAR Dependency Graph Observatory — API Endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
+import json
 from app.models.api import DirectDependenciesResponse, TransitiveDependenciesResponse
 from app.graph.direct import DirectDependencyService
 from app.storage.json_storage import JSONStorage
@@ -28,9 +30,8 @@ def get_transitive_dependency_service(direct_service=Depends(get_direct_dependen
 
 @router.get(
     "/dependencies/{ecosystem}/{package:path}/{version}/transitive",
-    response_model=TransitiveDependenciesResponse,
-    summary="Get Transitive Dependencies",
-    description="Returns the complete transitive dependency graph (bounded by MAX_NODES=1000)."
+    summary="Get Transitive Dependencies (Stream)",
+    description="Streams Server-Sent Events (SSE) detailing graph resolution progress. Ends with a 'complete' event containing the graph."
 )
 async def get_transitive_dependencies(
     ecosystem: str,
@@ -39,18 +40,20 @@ async def get_transitive_dependencies(
     service=Depends(get_transitive_dependency_service)
 ):
     """
-    Retrieve the full transitive dependency graph via BFS.
-    BFS stops when MAX_NODES (1000) is reached or the graph is exhausted.
+    Retrieve the full transitive dependency graph via BFS stream.
+    Yields progress events and ends with a complete event.
     """
-    try:
-        graph = await service.get_transitive_graph(ecosystem, package, version)
-        return graph
-    except PackageNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    async def event_publisher():
+        try:
+            async for event in service.stream_transitive_graph(ecosystem, package, version):
+                # Using model_dump_json if it's a Pydantic model is handled by the service yielding dicts
+                yield f"data: {json.dumps(event)}\n\n"
+        except PackageNotFoundError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Internal error: {str(e)}'})}\n\n"
+
+    return StreamingResponse(event_publisher(), media_type="text/event-stream")
 
 
 @router.get(

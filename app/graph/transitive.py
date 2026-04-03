@@ -52,15 +52,18 @@ class TransitiveDependencyService:
     # Public API
     # ------------------------------------------------------------------
 
-    async def get_transitive_graph(
+    async def stream_transitive_graph(
         self,
         ecosystem: str,
         package_name: str,
         version: str,
-    ) -> TransitiveDependenciesResponse:
+    ):
         """
         Retrieves the complete transitive dependency graph using Breadth-First Search.
         BFS continues until the graph is fully explored or MAX_NODES is reached.
+
+        This is an active generator yielding progress state during resolution,
+        ending with a 'complete' event containing the final payload.
 
         Args:
             ecosystem:    'npm' or 'pypi'
@@ -146,6 +149,16 @@ class TransitiveDependencyService:
                 (pkg, ver) for pkg, ver in current_level
                 if not any(v.version == ver for v in cached_get_versions(ecosystem, pkg))
             ]
+
+            # Yield progress before potential slow ingestion
+            yield {
+                "type": "progress",
+                "processed": node_count - len(current_level),
+                "discovered": len(visited),
+                "inQueue": len(current_level),
+                "missing": len(missing)
+            }
+
             if missing:
                 sem = asyncio.Semaphore(_MAX_CONCURRENT_INGEST)
 
@@ -230,8 +243,11 @@ class TransitiveDependencyService:
                     version="unknown",
                 )
 
-        return TransitiveDependenciesResponse(
-            root=root_id,
-            nodes=list(nodes_dict.values()),
-            edges=edges_list,
-        )
+        yield {
+            "type": "complete",
+            "data": TransitiveDependenciesResponse(
+                root=root_id,
+                nodes=list(nodes_dict.values()),
+                edges=edges_list,
+            ).model_dump(by_alias=True)
+        }
