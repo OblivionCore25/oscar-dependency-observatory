@@ -50,8 +50,10 @@ class PypiNormalizer:
         req_part = parts[0].strip()
         marker_part = parts[1].strip() if len(parts) > 1 else ""
         
-        # Soft skip testing or development extras strictly
-        if "extra == 'test'" in marker_part or "extra == 'dev'" in marker_part:
+        # Skip ALL optional extras — any requirement gated on `extra ==` is an
+        # optional install group (e.g. test, dev, ml, cuda, security …).
+        # Including them would pull GPU / ML packages into a runtime graph.
+        if "extra ==" in marker_part or 'extra ==' in marker_part:
             return None, None
             
         # Regex extracts name, brackets (optional), and constraints reliably 

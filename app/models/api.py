@@ -110,6 +110,24 @@ class PackageDetailsResponse(BaseModel):
     metrics: PackageMetrics = Field(default_factory=PackageMetrics)
 
 
+# ─── Ingested Packages ──────────────────────────────────────────────
+
+class IngestedPackageItem(BaseModel):
+    """A single ingested package entry (name + latest known version)."""
+
+    ecosystem: str = Field(..., examples=["npm"])
+    name: str = Field(..., examples=["react"])
+    version: str = Field(..., examples=["18.2.0"])
+
+
+class IngestedPackagesResponse(BaseModel):
+    """Response for GET /packages?ecosystem=npm&q=react"""
+
+    ecosystem: str = Field(..., examples=["npm"])
+    packages: List[IngestedPackageItem] = Field(default_factory=list)
+    total: int = Field(default=0, description="Total matches before pagination.")
+
+
 # ─── Analytics ──────────────────────────────────────────────────────
 
 class TopRiskItem(BaseModel):

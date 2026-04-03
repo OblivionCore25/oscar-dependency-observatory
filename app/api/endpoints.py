@@ -12,7 +12,11 @@ router = APIRouter(tags=["Dependencies"])
 
 # Dependency Injection for the API
 def get_storage():
-    return JSONStorage(base_dir="data")
+    from app.config.settings import settings
+    if settings.storage_mode == "postgres":
+        from app.storage.pg_storage import PgStorage
+        return PgStorage(database_url=settings.database_url)
+    return JSONStorage(base_dir=settings.data_directory)
 
 def get_direct_dependency_service(storage=Depends(get_storage)):
     return DirectDependencyService(storage)
@@ -26,7 +30,7 @@ def get_transitive_dependency_service(direct_service=Depends(get_direct_dependen
     "/dependencies/{ecosystem}/{package:path}/{version}/transitive",
     response_model=TransitiveDependenciesResponse,
     summary="Get Transitive Dependencies",
-    description="Returns the full transitive dependency graph."
+    description="Returns the complete transitive dependency graph (bounded by MAX_NODES=1000)."
 )
 async def get_transitive_dependencies(
     ecosystem: str,
@@ -35,7 +39,8 @@ async def get_transitive_dependencies(
     service=Depends(get_transitive_dependency_service)
 ):
     """
-    Retrieve full graph dependencies via BFS.
+    Retrieve the full transitive dependency graph via BFS.
+    BFS stops when MAX_NODES (1000) is reached or the graph is exhausted.
     """
     try:
         graph = await service.get_transitive_graph(ecosystem, package, version)

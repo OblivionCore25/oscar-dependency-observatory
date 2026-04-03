@@ -10,7 +10,11 @@ from app.storage.json_storage import JSONStorage
 router = APIRouter(tags=["Analytics"])
 
 def get_storage():
-    return JSONStorage(base_dir="data")
+    from app.config.settings import settings
+    if settings.storage_mode == "postgres":
+        from app.storage.pg_storage import PgStorage
+        return PgStorage(database_url=settings.database_url)
+    return JSONStorage(base_dir=settings.data_directory)
 
 def get_analytics_service(storage=Depends(get_storage)):
     return AnalyticsService(storage)

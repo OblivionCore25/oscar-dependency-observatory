@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # --- Storage ---
     storage_mode: str = "file"  # "file" | "sqlite" | "postgres"
     data_directory: str = "data"
+    database_url: str = "postgresql://postgres:postgres@localhost:5432/oscar_dep_db"
 
     # --- Method Observatory ---
     method_data_directory: str = "data"

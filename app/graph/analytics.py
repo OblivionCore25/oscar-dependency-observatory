@@ -49,43 +49,49 @@ class AnalyticsService:
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
         """
-        Retrieves the most depended-upon packages globally in our storage database.
+        Retrieves the most depended-upon packages globally in storage.
+        All metrics are computed from a single bulk edge read — no per-package queries.
         """
         all_edges = self.storage.get_all_edges(ecosystem)
-        
-        # fan_in: unique SOURCE PACKAGE NAMES that depend on a target (deduplicated across versions)
+
+        # fan_in: unique source PACKAGE NAMES pointing at each target (deduped across versions)
         fan_in_map: Dict[str, set] = defaultdict(set)
-        # fan_out: number of dependencies each package declares (edge count across versions)
+        # fan_out: total edge count emitted by each source package (across all versions)
         fan_out_map: Dict[str, int] = defaultdict(int)
-        
-        all_pkgs_map: Dict[str, str] = {}
+        # version_edges_map: edges per (source_package, source_version) — computed in memory
+        version_edges_map: Dict[str, int] = defaultdict(int)
+        # track latest version seen per package
+        latest_version_map: Dict[str, str] = {}
+
         for edge in all_edges:
-            fan_in_map[edge.target_package].add(edge.source_package)  # set dedup: react@18.0+18.1 = 1 unique dependent
+            fan_in_map[edge.target_package].add(edge.source_package)
             fan_out_map[edge.source_package] += 1
-            all_pkgs_map[edge.source_package] = edge.source_version
-            
-        # Get actual versions for target packages from storage if available
+            version_edges_map[(edge.source_package, edge.source_version)] += 1
+            # simple last-write for latest version (enough for display)
+            latest_version_map[edge.source_package] = edge.source_version
+
+        # Supplement with versions table for packages that have no outgoing edges
         all_versions = self.storage.get_all_versions(ecosystem)
-        latest_versions = {}
         for v in all_versions:
-            # simple override gets us latest mapped chronologically
-            latest_versions[v.package_name] = v.version
-            
-        # Union of all known packages (appear either as source or target)
+            if v.package_name not in latest_version_map:
+                latest_version_map[v.package_name] = v.version
+
         all_known_packages = set(fan_in_map.keys()) | set(fan_out_map.keys())
-            
+
         items = []
         for pkg in all_known_packages:
-            fan_in = len(fan_in_map.get(pkg, set()))  # unique package count
+            fan_in = len(fan_in_map.get(pkg, set()))
             fan_out = fan_out_map.get(pkg, 0)
-            version = latest_versions.get(pkg, all_pkgs_map.get(pkg, "unknown"))
-            
-            # Get the exact fan-out (direct dependencies) for this specific version
-            version_edges = self.storage.get_edges_for_version(ecosystem, pkg, version)
-            version_fan_out = len(version_edges)
-            
-            # Bottleneck = fan_in × fan_out: high when a pkg is both heavily used AND has many deps
-            bottleneck_score = float(fan_in * fan_out) if fan_out > 0 else float(fan_in)
+            version = latest_version_map.get(pkg, "unknown")
+            # version_fan_out = edges for this specific version (computed from in-memory map)
+            version_fan_out = version_edges_map.get((pkg, version), 0)
+            # Bottleneck = fan_in × version_fan_out:
+            # - fan_in: how many packages depend on this one (breadth of impact)
+            # - version_fan_out: how many deps this version pulls in (attack surface)
+            # Using version_fan_out (not the all-versions total) avoids inflating scores
+            # for packages with many historical releases (e.g. npm packages with 100+ versions).
+            bottleneck_score = float(fan_in * version_fan_out) if version_fan_out > 0 else float(fan_in)
+
             items.append(
                 TopRiskItem(
                     id=f"{ecosystem}:{pkg}@{version}",
@@ -96,26 +102,21 @@ class AnalyticsService:
                     fanOut=fan_out,
                     versionFanOut=version_fan_out,
                     bottleneckScore=bottleneck_score,
-                    bottleneckPercentile=0.0,  # filled in below
+                    bottleneckPercentile=0.0,
                 )
             )
 
-        # Compute percentile rank across ALL packages (before slicing to limit)
-        # Sort ascending so we can assign rank by position
+        # Compute percentile ranks before slicing
         total = len(items)
         if total > 1:
-            items.sort(key=lambda x: x.bottleneck_score)  # ascending for rank
+            items.sort(key=lambda x: x.bottleneck_score)
             for rank, item in enumerate(items):
-                # Use mid-point convention: items with same score share the average rank
                 item.bottleneck_percentile = round((rank / (total - 1)) * 100, 1)
         elif total == 1:
             items[0].bottleneck_percentile = 100.0
 
-        # Sort desc by bottleneck score (fan_in × fan_out), then fan_in as tie-breaker
         items.sort(key=lambda x: (x.bottleneck_score, x.fan_in), reverse=True)
-        top_items = items[:limit]
-
-        return TopRiskResponse(items=top_items, totalPackages=total)
+        return TopRiskResponse(items=items[:limit], totalPackages=total)
 
     # Known ecosystem sizes (approximate published figures, updated 2024)
     _ECOSYSTEM_ESTIMATES: Dict[str, int] = {

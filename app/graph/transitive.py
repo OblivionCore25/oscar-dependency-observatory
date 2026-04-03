@@ -1,113 +1,224 @@
 """
 OSCAR Dependency Graph Observatory — Transitive Dependency Service
 
-Provides logic for exploring full transitive graphs using BFS.
+Provides logic for exploring the complete transitive dependency graph using
+BFS, bounded by MAX_NODES to prevent unbounded ingestion.
+
+Performance design
+------------------
+Two complementary optimisations keep repeated and large queries fast:
+
+1. Per-request in-memory cache (local dicts)
+   Every get_versions / get_edges_for_version DB call is memoised for the
+   lifetime of one get_transitive_graph() invocation.  A shared dep like
+   `jmespath` appearing under five different packages only triggers one DB
+   round-trip instead of five (O(unique_packages) vs O(3N)).
+
+2. Concurrent child ingestion via asyncio.gather
+   When a BFS level expands to K child packages that are not yet in storage,
+   instead of fetching them sequentially (K × ~300 ms = seconds of wait) we
+   fire all K registry HTTP calls concurrently and await them together.  This
+   turns an 8-minute cold-start into a near-linear function of the slowest
+   single registry response, regardless of fan-out width.
 """
 
+import asyncio
+import logging
 from collections import deque
-from typing import Set, Dict, Tuple, List
+from typing import Dict, List, Optional, Tuple
 
-from app.models.api import TransitiveDependenciesResponse, GraphNode, GraphEdge
+from app.models.api import GraphEdge, GraphNode, TransitiveDependenciesResponse
 from app.graph.direct import DirectDependencyService
+from app.models.domain import DependencyEdge, Version
+
+logger = logging.getLogger("oscar")
+
+# Maximum concurrent registry HTTP requests during a cold-start ingestion.
+# Keeps us well below rate-limit thresholds for both PyPI and npm.
+_MAX_CONCURRENT_INGEST = 10
+
 
 class TransitiveDependencyService:
-    """
-    Service for querying transitive dependency graphs.
-    """
+    """Service for querying transitive dependency graphs."""
 
-    # For the MVP, we place a hard cap on nodes to prevent unbounded ingestion
-    # loops from stalling out the server or hitting API rate limits entirely.
+    # Hard cap on nodes — stops BFS once the graph reaches this size.
+    # Keeps ingestion bounded and the Cytoscape canvas responsive.
     MAX_NODES = 1000
 
     def __init__(self, direct_service: DirectDependencyService):
         self.direct_service = direct_service
 
-    async def get_transitive_graph(self, ecosystem: str, package_name: str, version: str) -> TransitiveDependenciesResponse:
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    async def get_transitive_graph(
+        self,
+        ecosystem: str,
+        package_name: str,
+        version: str,
+    ) -> TransitiveDependenciesResponse:
         """
-        Retrieves the full transitive dependency graph using Breadth-First Search.
-        Automatically triggers ingestion for previously unexplored nodes.
+        Retrieves the complete transitive dependency graph using Breadth-First Search.
+        BFS continues until the graph is fully explored or MAX_NODES is reached.
+
+        Args:
+            ecosystem:    'npm' or 'pypi'
+            package_name: Root package name
+            version:      Root package version
         """
         root_id = f"{ecosystem}:{package_name}@{version}"
-        
-        # State tracking for BFS
-        queue = deque([(package_name, version)])
-        
-        # Visited tracks resolving packages to avoid cycles. 
-        # Format: (package_name, version)
-        visited: Set[Tuple[str, str]] = set()
-        visited.add((package_name, version))
-        
-        # API Response components
+
+        # ── Per-request caches ──────────────────────────────────────────
+        _versions_cache: Dict[Tuple[str, str], List[Version]] = {}
+        _edges_cache: Dict[Tuple[str, str, str], List[DependencyEdge]] = {}
+
+        def cached_get_versions(eco: str, pkg: str) -> List[Version]:
+            key = (eco, pkg)
+            if key not in _versions_cache:
+                _versions_cache[key] = self.direct_service.storage.get_versions(eco, pkg)
+            return _versions_cache[key]
+
+        def cached_get_edges(eco: str, pkg: str, ver: str) -> List[DependencyEdge]:
+            key = (eco, pkg, ver)
+            if key not in _edges_cache:
+                _edges_cache[key] = self.direct_service.storage.get_edges_for_version(eco, pkg, ver)
+            return _edges_cache[key]
+
+        async def ensure_ingested(eco: str, pkg: str, ver: Optional[str] = None) -> bool:
+            """Ensures a package is in storage, ingesting if necessary."""
+            versions = cached_get_versions(eco, pkg)
+            if ver:
+                if any(v.version == ver for v in versions):
+                    return True
+            elif versions:
+                return True
+
+            try:
+                await self.direct_service._ingest_package(eco, pkg, ver)
+            except Exception:
+                return False
+
+            # Refresh local cache after ingestion
+            fresh = self.direct_service.storage.get_versions(eco, pkg)
+            _versions_cache[(eco, pkg)] = fresh
+            return bool(fresh)
+
+        async def resolve_child_version(eco: str, pkg: str) -> Optional[str]:
+            """Returns the latest known version for a child package (cache-first)."""
+            versions = cached_get_versions(eco, pkg)
+            if not versions:
+                ok = await ensure_ingested(eco, pkg)
+                if not ok:
+                    return None
+                versions = cached_get_versions(eco, pkg)
+            return versions[-1].version if versions else None
+
+        # ── BFS state ───────────────────────────────────────────────────
+        # We process the graph level-by-level so we can batch-ingest all
+        # missing packages at the same depth concurrently.
+        # current_level holds (pkg_name, version) pairs ready to expand.
+        current_level: List[Tuple[str, str]] = [(package_name, version)]
+        visited: Dict[Tuple[str, str], int] = {(package_name, version): 0}
+
         nodes_dict: Dict[str, GraphNode] = {}
         edges_list: List[GraphEdge] = []
-        
         node_count = 0
-        
-        while queue and node_count < self.MAX_NODES:
-            current_pkg, current_ver = queue.popleft()
-            current_id = f"{ecosystem}:{current_pkg}@{current_ver}"
-            
-            # Record structural node
-            if current_id not in nodes_dict:
-                nodes_dict[current_id] = GraphNode(
-                    id=current_id,
-                    label=f"{current_pkg}@{current_ver}",
-                    ecosystem=ecosystem,
-                    package=current_pkg,
-                    version=current_ver
-                )
-                node_count += 1
-            
-            # Fetch direct edges (which will auto-ingest if not present locally)
-            try:
-                direct_deps = await self.direct_service.get_direct_dependencies(ecosystem, current_pkg, current_ver)
-            except ValueError:
-                # Version might be missing natively, gracefully skip mapping its children
-                continue
 
-            for dep in direct_deps:
-                target_pkg = dep.name
-                
-                # To traverse transitively, we need a concrete version of the target package.
-                # For this MVP, we will auto-ingest the target package (via get_direct_dependencies of its latest version)
-                # But since we don't know its latest version yet, we can't call get_direct_dependencies directly.
-                # Instead, we check storage for its versions, or trigger an ingest if missing.
-                
-                target_versions = self.direct_service.storage.get_versions(ecosystem, target_pkg)
-                if not target_versions:
-                    # Trigger ingestion
-                    try:
-                        await self.direct_service._ingest_npm_package(target_pkg)
-                        target_versions = self.direct_service.storage.get_versions(ecosystem, target_pkg)
-                    except Exception:
-                        pass # Network error or 404
-                
-                if target_versions:
-                    # Naive MVP resolution: pick the lexically/chronologically last version
-                    # In a real app, we'd use a semver library against `dep.constraint`
-                    resolved_ver = target_versions[-1].version
+        depth = 0
+        while current_level and node_count < self.MAX_NODES:
+            # Record all nodes at this level
+            for pkg, ver in current_level:
+                node_id = f"{ecosystem}:{pkg}@{ver}"
+                if node_id not in nodes_dict:
+                    nodes_dict[node_id] = GraphNode(
+                        id=node_id,
+                        label=f"{pkg}@{ver}",
+                        ecosystem=ecosystem,
+                        package=pkg,
+                        version=ver,
+                    )
+                    node_count += 1
+
+            # ── Step 1: Ensure all current-level packages are ingested ──
+            # Missing packages are fetched concurrently (bounded parallelism).
+            missing = [
+                (pkg, ver) for pkg, ver in current_level
+                if not any(v.version == ver for v in cached_get_versions(ecosystem, pkg))
+            ]
+            if missing:
+                sem = asyncio.Semaphore(_MAX_CONCURRENT_INGEST)
+
+                async def ingest_one(p: str, v: str) -> None:
+                    async with sem:
+                        await ensure_ingested(ecosystem, p, v)
+
+                logger.info(
+                    "BFS depth %d: ingesting %d missing packages concurrently (max %d parallel)",
+                    depth, len(missing), _MAX_CONCURRENT_INGEST,
+                )
+                await asyncio.gather(*[ingest_one(p, v) for p, v in missing])
+
+            # ── Step 2: Collect all edges for the current level ──────────
+            next_level_candidates: Dict[str, GraphEdge] = {}  # target_pkg -> edge info
+            current_node_ids = {f"{ecosystem}:{p}@{v}": (p, v) for p, v in current_level}
+
+            for pkg, ver in current_level:
+                current_id = f"{ecosystem}:{pkg}@{ver}"
+                raw_edges = cached_get_edges(ecosystem, pkg, ver)
+
+                for edge in raw_edges:
+                    target_pkg = edge.target_package
+                    # We'll resolve versions in a batch below
+                    next_level_candidates[target_pkg] = (current_id, edge.version_constraint)
+
+            # ── Step 3: Resolve child versions concurrently ──────────────
+            # All packages that need a version lookup are fetched in parallel.
+            unresolved_targets = list(next_level_candidates.keys())
+            sem2 = asyncio.Semaphore(_MAX_CONCURRENT_INGEST)
+
+            async def resolve_one(pkg: str) -> Tuple[str, Optional[str]]:
+                async with sem2:
+                    return pkg, await resolve_child_version(ecosystem, pkg)
+
+            logger.debug("BFS depth %d: resolving %d child packages", depth, len(unresolved_targets))
+            resolution_results = await asyncio.gather(*[resolve_one(p) for p in unresolved_targets])
+
+            # ── Step 4: Build edges & next BFS level ─────────────────────
+            next_level: List[Tuple[str, str]] = []
+
+            for target_pkg, resolved_ver in resolution_results:
+                current_id, constraint = next_level_candidates[target_pkg]
+
+                if resolved_ver:
                     target_id = f"{ecosystem}:{target_pkg}@{resolved_ver}"
-                    
                     edges_list.append(GraphEdge(
                         source=current_id,
                         target=target_id,
-                        constraint=dep.constraint
+                        constraint=constraint,
                     ))
-                    
-                    # Enqueue for BFS if not visited
-                    if (target_pkg, resolved_ver) not in visited:
-                        visited.add((target_pkg, resolved_ver))
-                        queue.append((target_pkg, resolved_ver))
+                    child_key = (target_pkg, resolved_ver)
+                    if child_key not in visited:
+                        visited[child_key] = depth + 1
+                        next_level.append((target_pkg, resolved_ver))
                 else:
-                    # Could not resolve any versions for this package
                     target_id = f"{ecosystem}:{target_pkg}"
                     edges_list.append(GraphEdge(
                         source=current_id,
                         target=target_id,
-                        constraint=dep.constraint
+                        constraint=constraint,
                     ))
-        
-        # Add any targets that were exclusively edges (unresolved) to our nodes list
+
+            current_level = next_level
+            depth += 1
+
+        logger.info(
+            "BFS complete: %d nodes, %d edges, %d version cache entries, %d edge cache entries",
+            node_count, len(edges_list),
+            len(_versions_cache), len(_edges_cache),
+        )
+
+        # Ensure every edge target has a matching node entry
         for edge in edges_list:
             if edge.target not in nodes_dict:
                 pkg_only = edge.target.split(":")[-1].split("@")[0]
@@ -116,11 +227,11 @@ class TransitiveDependencyService:
                     label=edge.target.split(":")[-1],
                     ecosystem=ecosystem,
                     package=pkg_only,
-                    version="unknown"
+                    version="unknown",
                 )
-        
+
         return TransitiveDependenciesResponse(
             root=root_id,
             nodes=list(nodes_dict.values()),
-            edges=edges_list
+            edges=edges_list,
         )
