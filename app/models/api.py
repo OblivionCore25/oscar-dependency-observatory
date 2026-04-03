@@ -96,6 +96,10 @@ class PackageMetrics(BaseModel):
     fan_out: int = Field(default=0, alias="fanOut")
     bottleneck_score: float = Field(default=0.0, alias="bottleneckScore")
     diamond_count: int = Field(default=0, alias="diamondCount")
+    page_rank: float = Field(default=0.0, alias="pageRank")
+    closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
+    betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    blast_radius: int = Field(default=0, alias="blastRadius")
 
     model_config = {"populate_by_name": True}
 
@@ -146,6 +150,10 @@ class TopRiskItem(BaseModel):
         alias="bottleneckPercentile",
         description="Percentile rank (0–100) of this package's bottleneck score within the ingested graph.",
     )
+    page_rank: float = Field(default=0.0, alias="pageRank")
+    closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
+    betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    blast_radius: int = Field(default=0, alias="blastRadius")
 
     model_config = {"populate_by_name": True}
 

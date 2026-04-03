@@ -5,13 +5,10 @@ OSCAR Dependency Graph Observatory — Export API Endpoints
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.storage.json_storage import JSONStorage
+from app.storage.factory import get_storage
 from app.exporters.graph_exporter import ExportService
 
 router = APIRouter(tags=["Export"])
-
-def get_storage():
-    return JSONStorage(base_dir="data")
 
 def get_export_service(storage=Depends(get_storage)):
     return ExportService(storage)
@@ -20,7 +17,7 @@ def get_export_service(storage=Depends(get_storage)):
 @router.get(
     "/export/{ecosystem}/graph",
     summary="Export Complete Graph Dataset",
-    description="Returns the raw exported graph data across the entire specific ecosystem in JSON or CSV formats."
+    description="Returns the raw exported graph data across the entire specific ecosystem in JSON, CSV, or GraphML formats."
 )
 async def export_graph(
     ecosystem: str,
@@ -39,8 +36,11 @@ async def export_graph(
             data = service.export_graph_csv(ecosystem)
             # Use PlainTextResponse to avoid typical JSON wrapping that FastAPI does for strings natively
             return PlainTextResponse(content=data, media_type="text/csv")
+        elif format_lower == "graphml":
+            data = service.export_graph_graphml(ecosystem)
+            return PlainTextResponse(content=data, media_type="application/xml")
         else:
-            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}. Use 'json' or 'csv'.")
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}. Use 'json', 'csv', or 'graphml'.")
     except HTTPException:
         # Re-raise explicit HTTP exceptions instead of throwing 500
         raise

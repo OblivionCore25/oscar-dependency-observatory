@@ -5,9 +5,11 @@ JSON-based implementation of the StorageService.
 import json
 import os
 from pathlib import Path
+import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from app.models.domain import Package, Version, DependencyEdge
+from app.models.domain import Package, Version, DependencyEdge, Snapshot
 from app.storage import StorageService
 
 
@@ -152,3 +154,63 @@ class JSONStorage(StorageService):
                 except (json.JSONDecodeError, ValueError):
                     pass
         return all_edges
+
+    def create_snapshot(self, ecosystem: str, description: Optional[str] = None) -> Snapshot:
+        snapshot_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+
+        snapshot = Snapshot(
+            snapshot_id=snapshot_id,
+            created_at=now,
+            ecosystem=ecosystem,
+            description=description
+        )
+
+        edges = self.get_all_edges(ecosystem)
+
+        snap_dir = self.base_dir / ecosystem / "snapshots"
+        snap_dir.mkdir(parents=True, exist_ok=True)
+
+        data = {
+            "snapshot": snapshot.model_dump(mode="json"),
+            "edges": [e.model_dump(mode="json") for e in edges]
+        }
+
+        file_path = snap_dir / f"{snapshot_id}.json"
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        return snapshot
+
+    def list_snapshots(self, ecosystem: str) -> List[Snapshot]:
+        snap_dir = self.base_dir / ecosystem / "snapshots"
+        if not snap_dir.exists():
+            return []
+
+        snapshots = []
+        for file_path in snap_dir.glob("*.json"):
+            with open(file_path, "r", encoding="utf-8") as f:
+                try:
+                    data = json.load(f)
+                    snapshots.append(Snapshot.model_validate(data["snapshot"]))
+                except (json.JSONDecodeError, ValueError, KeyError):
+                    pass
+
+        # Sort descending by creation date
+        snapshots.sort(key=lambda x: x.created_at, reverse=True)
+        return snapshots
+
+    def get_snapshot_edges(self, snapshot_id: str) -> List[DependencyEdge]:
+        # Need to search across ecosystems since snapshot_id is global but stored per ecosystem
+        for eco_dir in self.base_dir.iterdir():
+            if not eco_dir.is_dir():
+                continue
+            file_path = eco_dir / "snapshots" / f"{snapshot_id}.json"
+            if file_path.exists():
+                with open(file_path, "r", encoding="utf-8") as f:
+                    try:
+                        data = json.load(f)
+                        return [DependencyEdge.model_validate(e) for e in data["edges"]]
+                    except (json.JSONDecodeError, ValueError, KeyError):
+                        return []
+        return []

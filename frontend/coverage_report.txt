@@ -1,0 +1,52 @@
+
+ RUN  v3.2.4 /Users/fabiangonzalez/Documents/oscar-dependency-observatory/oscar-dependency-observatory/frontend
+      Coverage enabled with v8
+
+ ✓ src/components/GraphCanvas.test.tsx (2 tests) 42ms
+ ✓ src/components/MethodCallGraph.test.tsx (2 tests) 43ms
+ ✓ src/pages/CommunityView.test.tsx (3 tests) 64ms
+ ✓ src/pages/HotspotDashboard.test.tsx (3 tests) 91ms
+ ✓ src/pages/PackageSearch.test.tsx (4 tests) 186ms
+ ✓ src/hooks/hooks.test.tsx (4 tests) 236ms
+ ✓ src/pages/GraphViewer.test.tsx (4 tests) 226ms
+ ✓ src/pages/TopRisk.test.tsx (5 tests) 177ms
+ ✓ src/pages/MethodExplorer.test.tsx (6 tests) 196ms
+ ✓ src/App.test.tsx (1 test) 130ms
+ ✓ src/pages/SnapshotsView.test.tsx (4 tests) 289ms
+ ✓ src/components/TopRiskTable.test.tsx (4 tests) 324ms
+ ✓ src/pages/MethodGraphViewer.test.tsx (3 tests) 271ms
+ ✓ src/services/api.test.ts (4 tests) 3ms
+
+ Test Files  14 passed (14)
+      Tests  49 passed (49)
+   Start at  01:05:56
+   Duration  2.15s (transform 888ms, setup 3.21s, collect 3.03s, tests 2.28s, environment 11.37s, prepare 1.46s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.19 |    90.42 |      92 |   99.19 |                   
+ src               |     100 |      100 |     100 |     100 |                   
+  App.tsx          |     100 |      100 |     100 |     100 |                   
+ src/components    |   99.64 |    91.91 |     100 |   99.64 |                   
+  GraphCanvas.tsx  |     100 |    95.65 |     100 |     100 | 37                
+  Layout.tsx       |     100 |      100 |     100 |     100 |                   
+  ...CallGraph.tsx |   99.35 |    90.47 |     100 |   99.35 | 136               
+  TopRiskTable.tsx |    99.4 |    83.33 |     100 |    99.4 | 34                
+ src/hooks         |     100 |      100 |     100 |     100 |                   
+  ...yticsQuery.ts |     100 |      100 |     100 |     100 |                   
+  useGraphQuery.ts |     100 |      100 |     100 |     100 |                   
+  ...ckageQuery.ts |     100 |      100 |     100 |     100 |                   
+ src/pages         |   98.92 |    89.18 |   87.87 |   98.92 |                   
+  ...unityView.tsx |     100 |    88.88 |      60 |     100 | 88,92             
+  GraphViewer.tsx  |   97.87 |    78.84 |     100 |   97.87 | 32,38,179,188     
+  ...Dashboard.tsx |     100 |      100 |      60 |     100 |                   
+  ...dExplorer.tsx |   95.65 |    83.87 |   88.88 |   95.65 | ...07-110,255-258 
+  ...aphViewer.tsx |     100 |      100 |   91.66 |     100 |                   
+  ...ageSearch.tsx |     100 |    83.33 |     100 |     100 | 98,165-170        
+  ...shotsView.tsx |     100 |    89.65 |     100 |     100 | 111,175,212       
+  TopRisk.tsx      |   99.27 |     87.5 |   71.42 |   99.27 | 104               
+ src/services      |     100 |      100 |     100 |     100 |                   
+  api.ts           |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
