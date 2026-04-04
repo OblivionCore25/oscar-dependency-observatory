@@ -99,6 +99,7 @@ class PackageMetrics(BaseModel):
     page_rank: float = Field(default=0.0, alias="pageRank")
     closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
 
     model_config = {"populate_by_name": True}
@@ -153,6 +154,7 @@ class TopRiskItem(BaseModel):
     page_rank: float = Field(default=0.0, alias="pageRank")
     closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
 
     model_config = {"populate_by_name": True}

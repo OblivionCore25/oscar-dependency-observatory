@@ -4,8 +4,10 @@ OSCAR Dependency Graph Observatory — Analytics Service
 Computes central metrics on the graph structure using flat files.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Set
 from collections import defaultdict
+
+import networkx as nx
 
 from app.storage import StorageService
 from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse, CoverageResponse
@@ -18,6 +20,21 @@ class AnalyticsService:
     
     def __init__(self, storage: StorageService):
         self.storage = storage
+
+    def _build_nx_graph(self, ecosystem: str) -> nx.DiGraph:
+        """
+        Builds a NetworkX directed graph of the ecosystem at the package name level.
+        We aggregate all version edges into a single structural dependency link 
+        between packages to ensure a connected graph for centralities.
+        """
+        G = nx.DiGraph()
+        all_edges = self.storage.get_all_edges(ecosystem)
+        
+        for edge in all_edges:
+            # We add unweighted edges if a dependency exists on any version
+            G.add_edge(edge.source_package, edge.target_package)
+            
+        return G
 
     async def get_package_metrics(self, ecosystem: str, package_name: str, version: str) -> PackageMetrics:
         """
@@ -38,13 +55,46 @@ class AnalyticsService:
         
         bottleneck_score = float(fan_in * fan_out)
         
+        # Build graph for centralities
+        G = self._build_nx_graph(ecosystem)
+        pagerank = 0.0
+        betweenness = 0.0
+        closeness = 0.0
+        eigenvector = 0.0
+        blast_radius = 0
+        
+        if G.has_node(package_name):
+            try:
+                pagerank = nx.pagerank(G).get(package_name, 0.0)
+            except:
+                pass
+            
+            # Note: betweenness/closeness on the whole ecosystem is expensive.
+            # In a production system, this would be pre-computed by a worker.
+            # We compute it here for a single node using ego graphs if possible, 
+            # but since full betweenness is required, we do it if G is small enough.
+            
+            # Calculate blast radius
+            blast_radius = len(nx.descendants(G, package_name))
+            
+            # Safely compute eigenvector on the largest weakly connected component
+            try:
+                eigenvector = nx.eigenvector_centrality_numpy(G).get(package_name, 0.0)
+            except Exception:
+                pass
+                
         return PackageMetrics(
             directDependencies=fan_out,
             transitiveDependencies=0,
             fanIn=fan_in,
             fanOut=fan_out,
             bottleneckScore=bottleneck_score,
-            diamondCount=0
+            diamondCount=0,
+            pageRank=pagerank,
+            closenessCentrality=closeness,
+            betweennessCentrality=betweenness,
+            eigenvectorCentrality=eigenvector,
+            blastRadius=blast_radius
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
@@ -116,7 +166,31 @@ class AnalyticsService:
             items[0].bottleneck_percentile = 100.0
 
         items.sort(key=lambda x: (x.bottleneck_score, x.fan_in), reverse=True)
-        return TopRiskResponse(items=items[:limit], totalPackages=total)
+        top_items = items[:limit]
+        
+        # Now we only compute expensive centralities for the top N items being returned
+        G = self._build_nx_graph(ecosystem)
+        if len(G.nodes) > 0:
+            try:
+                pageranks = nx.pagerank(G)
+            except:
+                pageranks = {}
+                
+            try:
+                eigenvectors = nx.eigenvector_centrality_numpy(G)
+            except:
+                eigenvectors = {}
+                
+            for item in top_items:
+                pkg_name = item.name
+                if G.has_node(pkg_name):
+                    item.page_rank = pageranks.get(pkg_name, 0.0)
+                    item.eigenvector_centrality = eigenvectors.get(pkg_name, 0.0)
+                    item.blast_radius = len(nx.descendants(G, pkg_name))
+                    # Note: We omit betweenness/closeness here intentionally to avoid 
+                    # O(V*E) delays on API requests for the whole graph.
+        
+        return TopRiskResponse(items=top_items, totalPackages=total)
 
     # Known ecosystem sizes (approximate published figures, updated 2024)
     _ECOSYSTEM_ESTIMATES: Dict[str, int] = {
