@@ -340,9 +340,8 @@ class AnalyticsService:
             VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
             
         root_id = f"{package_name}@{version}"
-        depths = {}
-        if VG.has_node(root_id):
-            depths = nx.single_source_shortest_path_length(VG, root_id)
+        VG.add_node(root_id)
+        depths = nx.single_source_shortest_path_length(VG, root_id)
             
         return depths
 
