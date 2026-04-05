@@ -113,6 +113,17 @@ async def get_package_details(
         if not version_exists:
             raise HTTPException(status_code=404, detail=f"Version {version} not found for package {package}")
             
+        # Guarantee local cache warming mathematically by fully pulling the transitive graph into local Postgres
+        # This pays a one-time ~3-8 second penalty, which fulfills the required constraints for true Libyear calculation.
+        from app.graph.transitive import TransitiveDependencyService
+        t_service = TransitiveDependencyService(direct_service)
+        try:
+            async for _ in t_service.stream_transitive_graph(ecosystem, package, version):
+                pass # Unroll the BFS stream exclusively to trigger the backend ingestion
+        except Exception as e:
+            import logging
+            logging.error(f"Transitive cache mapping failed in detail-view: {e}")
+            
         metrics = await analytics_service.get_package_metrics(ecosystem, package, version)
         
         return PackageDetailsResponse(

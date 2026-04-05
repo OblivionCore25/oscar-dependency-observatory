@@ -101,6 +101,8 @@ class PackageMetrics(BaseModel):
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
     eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
+    libyears: float = Field(default=0.0, alias="libyears")
+    transitive_depth: int = Field(default=0, alias="transitiveDepth")
 
     model_config = {"populate_by_name": True}
 

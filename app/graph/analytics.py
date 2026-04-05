@@ -62,17 +62,15 @@ class AnalyticsService:
         closeness = 0.0
         eigenvector = 0.0
         blast_radius = 0
+        libyears = 0.0
+        diamond_count = 0
+        transitive_depth = 0
         
         if G.has_node(package_name):
             try:
                 pagerank = nx.pagerank(G).get(package_name, 0.0)
             except:
                 pass
-            
-            # Note: betweenness/closeness on the whole ecosystem is expensive.
-            # In a production system, this would be pre-computed by a worker.
-            # We compute it here for a single node using ego graphs if possible, 
-            # but since full betweenness is required, we do it if G is small enough.
             
             # Calculate blast radius
             blast_radius = len(nx.descendants(G, package_name))
@@ -83,18 +81,98 @@ class AnalyticsService:
             except Exception:
                 pass
                 
+        # Tier 2 Metrics (Libyears, Diamonds, Transitive Depth)
+        try:
+                # Setup dates and versions for libyears
+                all_versions = self.storage.get_all_versions(ecosystem)
+                from collections import defaultdict
+                versions_by_pkg = defaultdict(list)
+                for v in all_versions:
+                    versions_by_pkg[v.package_name].append(v)
+                
+                latest_date_by_pkg = {}
+                latest_version_by_pkg = {}
+                for pkg, vlist in versions_by_pkg.items():
+                    valid_versions = [v for v in vlist if v.published_at]
+                    if valid_versions:
+                        latest_v = max(valid_versions, key=lambda x: x.published_at)
+                        latest_date_by_pkg[pkg] = latest_v.published_at
+                        latest_version_by_pkg[pkg] = latest_v.version
+                    elif vlist:
+                        latest_version_by_pkg[pkg] = vlist[-1].version
+                        
+                date_by_vid = {f"{v.package_name}@{v.version}": v.published_at for v in all_versions if v.published_at}
+                
+                # Build version-aware directed graph to trace exact resolved dependencies
+                # We extract the base numerical constraint string to bind the correct baseline date for tech lag!
+                import re
+                VG = nx.DiGraph()
+                for edge in all_edges:
+                    base_ver = edge.resolved_target_version
+                    if not base_ver and edge.version_constraint:
+                        # Strip ^ ~ >= < markers to pinpoint the developer's exact pinned "developed against" threshold
+                        match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                        if match:
+                            base_ver = match.group(1)
+                    
+                    if not base_ver:
+                        base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                        
+                    VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+                root_id = f"{package_name}@{version}"
+                if VG.has_node(root_id):
+                    descendants_v = nx.descendants(VG, root_id)
+                    
+                    # Transitive Depth
+                    try:
+                        sub_VG = VG.subgraph(descendants_v | {root_id})
+                        transitive_depth = nx.dag_longest_path_length(sub_VG)
+                    except Exception:
+                        transitive_depth = 0
+                
+                # Compute diamonds and libyears
+                seen_pkgs = defaultdict(set)
+                for tgt_id in descendants_v:
+                    if "@" not in tgt_id: continue
+                    pkg_only, ver_only = tgt_id.split("@", 1)
+                    seen_pkgs[pkg_only].add(ver_only)
+                    
+                    latest_date = latest_date_by_pkg.get(pkg_only)
+                    used_date = date_by_vid.get(tgt_id)
+                    
+                    if not used_date and pkg_only in versions_by_pkg:
+                        # Fuzzy match if constraint lacked patch version (e.g. "tough-cookie@2.4")
+                        for v in versions_by_pkg[pkg_only]:
+                            if v.version.startswith(ver_only) and v.published_at:
+                                used_date = v.published_at
+                                break
+                    
+                    if used_date and latest_date and latest_date > used_date:
+                        delta = (latest_date - used_date).days / 365.25
+                        libyears += delta
+                
+                # A diamond conflict is a transitive package required in multiple distinct versions
+                diamond_count = sum(1 for versions_set in seen_pkgs.values() if len(versions_set) > 1)
+                
+        except Exception as e:
+            import logging
+            logging.error(f"Tier 2 Metrics Calculation Failed: {e}")
+
         return PackageMetrics(
             directDependencies=fan_out,
             transitiveDependencies=0,
             fanIn=fan_in,
             fanOut=fan_out,
             bottleneckScore=bottleneck_score,
-            diamondCount=0,
+            diamondCount=diamond_count,
             pageRank=pagerank,
             closenessCentrality=closeness,
             betweennessCentrality=betweenness,
             eigenvectorCentrality=eigenvector,
-            blastRadius=blast_radius
+            blastRadius=blast_radius,
+            libyears=round(libyears, 2),
+            transitiveDepth=transitive_depth
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
