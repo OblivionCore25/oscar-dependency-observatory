@@ -50,6 +50,48 @@ async def get_transitive_dependencies(
 
 
 @router.get(
+    "/dependencies/{ecosystem}/{package:path}/{version}/depths",
+    summary="Get Transitive Depths",
+    description="Returns a dictionary mapping node IDs to their depth from the root."
+)
+async def get_package_depths(
+    ecosystem: str,
+    package: str,
+    version: str,
+    direct_service: DirectDependencyService = Depends(get_direct_dependency_service)
+):
+    from app.graph.analytics import AnalyticsService
+    analytics_service = AnalyticsService(direct_service.storage)
+    
+    try:
+        depths = analytics_service.get_transitive_depths(ecosystem, package, version)
+        return depths
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
+    "/dependencies/{ecosystem}/{package:path}/{version}/libyears",
+    summary="Get Transitive Libyears Breakdown",
+    description="Returns a dictionary mapping node IDs to their libyears debt."
+)
+async def get_package_libyears_breakdown(
+    ecosystem: str,
+    package: str,
+    version: str,
+    direct_service: DirectDependencyService = Depends(get_direct_dependency_service)
+):
+    from app.graph.analytics import AnalyticsService
+    analytics_service = AnalyticsService(direct_service.storage)
+    
+    try:
+        libyears = analytics_service.get_libyears_breakdown(ecosystem, package, version)
+        return libyears
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
     "/dependencies/{ecosystem}/{package:path}/{version}",
     response_model=DirectDependenciesResponse,
     summary="Get Direct Dependencies",

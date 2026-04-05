@@ -75,9 +75,14 @@ class AnalyticsService:
             # Calculate blast radius
             blast_radius = len(nx.descendants(G, package_name))
             
-            # Safely compute eigenvector on the largest weakly connected component
+            # Safely compute eigenvector on the largest connected component of the undirected graph
             try:
-                eigenvector = nx.eigenvector_centrality_numpy(G).get(package_name, 0.0)
+                if len(G) > 0:
+                    udG = G.to_undirected()
+                    largest_cc = max(nx.connected_components(udG), key=len)
+                    if package_name in largest_cc:
+                        subG = udG.subgraph(largest_cc)
+                        eigenvector = nx.eigenvector_centrality_numpy(subG).get(package_name, 0.0)
             except Exception:
                 pass
                 
@@ -135,7 +140,7 @@ class AnalyticsService:
                 seen_pkgs = defaultdict(set)
                 for tgt_id in descendants_v:
                     if "@" not in tgt_id: continue
-                    pkg_only, ver_only = tgt_id.split("@", 1)
+                    pkg_only, ver_only = tgt_id.rsplit("@", 1)
                     seen_pkgs[pkg_only].add(ver_only)
                     
                     latest_date = latest_date_by_pkg.get(pkg_only)
@@ -255,8 +260,14 @@ class AnalyticsService:
                 pageranks = {}
                 
             try:
-                eigenvectors = nx.eigenvector_centrality_numpy(G)
-            except:
+                if len(G) > 0:
+                    udG = G.to_undirected()
+                    largest_cc = max(nx.connected_components(udG), key=len)
+                    subG = udG.subgraph(largest_cc)
+                    eigenvectors = nx.eigenvector_centrality_numpy(subG)
+                else:
+                    eigenvectors = {}
+            except Exception:
                 eigenvectors = {}
                 
             for item in top_items:
@@ -301,3 +312,105 @@ class AnalyticsService:
             estimatedTotal=estimated,
             coveragePct=coverage_pct,
         )
+
+    def get_transitive_depths(self, ecosystem: str, package_name: str, version: str) -> Dict[str, int]:
+        """
+        Computes the shortest path depth from the root node to all reachable dependencies.
+        Returns a dictionary mapping node IDs (e.g. 'pkg@1.0') to integer depths (0 = root, 1 = direct, 2+ = transitive).
+        """
+        all_edges = self.storage.get_all_edges(ecosystem)
+        all_versions = self.storage.get_all_versions(ecosystem)
+        
+        latest_version_by_pkg = {}
+        for v in all_versions:
+            latest_version_by_pkg[v.package_name] = v.version
+
+        import re
+        VG = nx.DiGraph()
+        for edge in all_edges:
+            base_ver = edge.resolved_target_version
+            if not base_ver and edge.version_constraint:
+                match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                if match:
+                    base_ver = match.group(1)
+            
+            if not base_ver:
+                base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                
+            VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+        root_id = f"{package_name}@{version}"
+        depths = {}
+        if VG.has_node(root_id):
+            depths = nx.single_source_shortest_path_length(VG, root_id)
+            
+        return depths
+
+    def get_libyears_breakdown(self, ecosystem: str, package_name: str, version: str) -> Dict[str, float]:
+        """
+        Computes the libyears debt introduced by each transitive dependency.
+        Returns a dictionary mapping node IDs (e.g. 'pkg@ver') to libyears debt (float).
+        """
+        all_edges = self.storage.get_all_edges(ecosystem)
+        all_versions = self.storage.get_all_versions(ecosystem)
+        
+        from collections import defaultdict
+        import re
+        
+        versions_by_pkg = defaultdict(list)
+        for v in all_versions:
+            versions_by_pkg[v.package_name].append(v)
+            
+        latest_date_by_pkg = {}
+        latest_version_by_pkg = {}
+        for pkg, vlist in versions_by_pkg.items():
+            valid_versions = [v for v in vlist if v.published_at]
+            if valid_versions:
+                latest_v = max(valid_versions, key=lambda x: x.published_at)
+                latest_date_by_pkg[pkg] = latest_v.published_at
+                latest_version_by_pkg[pkg] = latest_v.version
+            elif vlist:
+                latest_version_by_pkg[pkg] = vlist[-1].version
+                
+        date_by_vid = {f"{v.package_name}@{v.version}": v.published_at for v in all_versions if v.published_at}
+        
+        VG = nx.DiGraph()
+        for edge in all_edges:
+            base_ver = edge.resolved_target_version
+            if not base_ver and edge.version_constraint:
+                match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                if match:
+                    base_ver = match.group(1)
+            
+            if not base_ver:
+                base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                
+            VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+        root_id = f"{package_name}@{version}"
+        libyears_breakdown = {}
+        
+        if VG.has_node(root_id):
+            descendants_v = nx.descendants(VG, root_id)
+            
+            for tgt_id in descendants_v:
+                if "@" not in tgt_id: continue
+                pkg_only, ver_only = tgt_id.rsplit("@", 1)
+                
+                latest_date = latest_date_by_pkg.get(pkg_only)
+                used_date = date_by_vid.get(tgt_id)
+                
+                if not used_date and pkg_only in versions_by_pkg:
+                    for v in versions_by_pkg[pkg_only]:
+                        if v.version.startswith(ver_only) and v.published_at:
+                            used_date = v.published_at
+                            break
+                            
+                if used_date and latest_date:
+                    delta = (latest_date - used_date).days / 365.25
+                    if delta > 0:
+                        libyears_breakdown[tgt_id] = round(delta, 2)
+                    else:
+                        libyears_breakdown[tgt_id] = 0.0
+                    
+        return libyears_breakdown
