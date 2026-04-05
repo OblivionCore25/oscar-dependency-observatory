@@ -198,3 +198,44 @@ class CoverageResponse(BaseModel):
     )
 
     model_config = {"populate_by_name": True}
+
+
+# ─── Vulnerability ──────────────────────────────────────────────────
+
+class VulnerabilitySummary(BaseModel):
+    """A single known vulnerability (CVE/GHSA) for a package version."""
+
+    id: str = Field(..., description="Advisory ID", examples=["GHSA-462w-v97r-4m45"])
+    aliases: List[str] = Field(default_factory=list, description="CVE aliases", examples=[["CVE-2019-10906"]])
+    summary: str = Field(default="", description="Short description of the vulnerability")
+    severity: str = Field(default="UNKNOWN", description="CRITICAL, HIGH, MODERATE, LOW, or UNKNOWN")
+    published: str = Field(default="", description="ISO 8601 publication date")
+    fixed_versions: List[str] = Field(default_factory=list, alias="fixedVersions", description="Versions that fix this vulnerability")
+
+    model_config = {"populate_by_name": True}
+
+
+class VulnerabilityBreakdownResponse(BaseModel):
+    """Response for GET /dependencies/{ecosystem}/{package}/{version}/vulnerabilities"""
+
+    breakdown: dict = Field(
+        default_factory=dict,
+        description="Maps pkg@ver to list of vulnerability summaries",
+    )
+    total_affected: int = Field(
+        default=0,
+        alias="totalAffected",
+        description="Count of packages with at least 1 known vulnerability",
+    )
+    total_vulns: int = Field(
+        default=0,
+        alias="totalVulns",
+        description="Total CVE count across all transitive dependencies",
+    )
+    severity_counts: dict = Field(
+        default_factory=lambda: {"CRITICAL": 0, "HIGH": 0, "MODERATE": 0, "LOW": 0, "UNKNOWN": 0},
+        alias="severityCounts",
+        description="Breakdown of total vulnerabilities by severity level",
+    )
+
+    model_config = {"populate_by_name": True}
