@@ -104,6 +104,15 @@ class PackageMetrics(BaseModel):
     libyears: float = Field(default=0.0, alias="libyears")
     transitive_depth: int = Field(default=0, alias="transitiveDepth")
 
+    # External enrichment (deps.dev, OpenSSF Scorecard, registry downloads)
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    global_direct_dependents: Optional[int] = Field(default=None, alias="globalDirectDependents")
+    global_indirect_dependents: Optional[int] = Field(default=None, alias="globalIndirectDependents")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    scorecard_checks: Optional[dict] = Field(default=None, alias="scorecardChecks")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
+
     model_config = {"populate_by_name": True}
 
 
@@ -158,6 +167,12 @@ class TopRiskItem(BaseModel):
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
     eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
+
+    # External enrichment
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
 
     model_config = {"populate_by_name": True}
 
@@ -237,5 +252,26 @@ class VulnerabilityBreakdownResponse(BaseModel):
         alias="severityCounts",
         description="Breakdown of total vulnerabilities by severity level",
     )
+
+    model_config = {"populate_by_name": True}
+
+
+# ─── Enrichment ─────────────────────────────────────────────────────
+
+class EnrichmentResponse(BaseModel):
+    """Response for GET /analytics/enrich/{ecosystem}/{package}/{version}"""
+
+    ecosystem: str = Field(..., examples=["npm"])
+    package: str = Field(..., examples=["express"])
+    version: str = Field(..., examples=["5.1.0"])
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    global_direct_dependents: Optional[int] = Field(default=None, alias="globalDirectDependents")
+    global_indirect_dependents: Optional[int] = Field(default=None, alias="globalIndirectDependents")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    scorecard_checks: Optional[dict] = Field(default=None, alias="scorecardChecks")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
+    licenses: List[str] = Field(default_factory=list)
+    is_deprecated: bool = Field(default=False, alias="isDeprecated")
 
     model_config = {"populate_by_name": True}

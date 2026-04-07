@@ -12,6 +12,7 @@ import networkx as nx
 from app.storage import StorageService
 from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse, CoverageResponse
 from app.graph.direct import DirectDependencyService
+from app.enrichment.enrichment_service import EnrichmentService
 
 class AnalyticsService:
     """
@@ -164,6 +165,25 @@ class AnalyticsService:
             import logging
             logging.error(f"Tier 2 Metrics Calculation Failed: {e}")
 
+        # ── External Enrichment ────────────────────────────────────────
+        enrichment_svc = EnrichmentService()
+        try:
+            enrichment = await enrichment_svc.enrich_package(ecosystem, package_name, version)
+        except Exception:
+            enrichment = None
+
+        global_fan_in = enrichment.global_fan_in if enrichment else None
+        global_direct = enrichment.global_direct_dependents if enrichment else None
+        global_indirect = enrichment.global_indirect_dependents if enrichment else None
+        monthly_downloads = enrichment.monthly_downloads if enrichment else None
+        scorecard_score = enrichment.scorecard_score if enrichment else None
+        scorecard_checks = enrichment.scorecard_checks if enrichment else None
+        source_repo_url = enrichment.source_repo_url if enrichment else None
+
+        # Replace bottleneck score with globalFanIn × fanOut when available
+        if global_fan_in is not None:
+            bottleneck_score = float(global_fan_in * fan_out)
+
         return PackageMetrics(
             directDependencies=fan_out,
             transitiveDependencies=0,
@@ -177,7 +197,14 @@ class AnalyticsService:
             eigenvectorCentrality=eigenvector,
             blastRadius=blast_radius,
             libyears=round(libyears, 2),
-            transitiveDepth=transitive_depth
+            transitiveDepth=transitive_depth,
+            globalFanIn=global_fan_in,
+            globalDirectDependents=global_direct,
+            globalIndirectDependents=global_indirect,
+            monthlyDownloads=monthly_downloads,
+            scorecardScore=scorecard_score,
+            scorecardChecks=scorecard_checks,
+            sourceRepoUrl=source_repo_url,
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
