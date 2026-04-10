@@ -226,6 +226,7 @@ class VulnerabilitySummary(BaseModel):
     severity: str = Field(default="UNKNOWN", description="CRITICAL, HIGH, MODERATE, LOW, or UNKNOWN")
     published: str = Field(default="", description="ISO 8601 publication date")
     fixed_versions: List[str] = Field(default_factory=list, alias="fixedVersions", description="Versions that fix this vulnerability")
+    affected_functions: List[str] = Field(default_factory=list, alias="affectedFunctions", description="Specific functions affected by this vulnerability according to OSV ecosystem data")
 
     model_config = {"populate_by_name": True}
 
