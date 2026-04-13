@@ -148,6 +148,8 @@ class DepsDevClient:
         if not system:
             return None
 
+        original_version = version
+
         if version == "latest" or not version:
             resolved = await self._resolve_latest_version(system, package_name)
             if not resolved:
@@ -183,6 +185,14 @@ class DepsDevClient:
                         if source_repo_url.startswith("ssh://"):
                             source_repo_url = source_repo_url.replace("ssh://", "https://", 1)
                         break
+
+                # Fallback: if we didn't find the source repo in this old version,
+                # often older versions of PyPI/NPM packages lack the metadata.
+                # Re-query the 'latest' version to pull the repository URL.
+                if not source_repo_url and original_version != "latest":
+                    latest_info = await self.get_package_info(ecosystem, package_name, "latest")
+                    if latest_info and latest_info.source_repo_url:
+                        source_repo_url = latest_info.source_repo_url
 
                 result = PackageInfoData(
                     source_repo_url=source_repo_url,
