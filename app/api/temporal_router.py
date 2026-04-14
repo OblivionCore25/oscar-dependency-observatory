@@ -5,7 +5,7 @@ from app.models.temporal import TemporalReport
 router = APIRouter(prefix="/analytics", tags=["Temporal Analytics"])
 analyzer = TemporalAnalyzer()
 
-@router.get("/{ecosystem}/{package}/temporal", response_model=TemporalReport)
+@router.get("/{ecosystem}/{package:path}/temporal", response_model=TemporalReport)
 async def get_temporal_analysis(
     ecosystem: str, 
     package: str, 

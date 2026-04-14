@@ -9,6 +9,8 @@ from typing import Dict, Any, List
 import uuid
 import datetime
 import json
+import tempfile
+import os
 from packageurl import PackageURL
 
 from lib4sbom.sbom import SBOM
@@ -157,10 +159,16 @@ class SBOMExporter:
         """
         sbom_model = self._build_sbom_model(ecosystem, package_name, version, graph_data, vulnerabilities)
         gen = SBOMGenerator(sbom_type="cyclonedx", format="json")
-        gen.generate(package_name, sbom_model.get_sbom(), "cyclonedx.json")
         
-        with open("cyclonedx.json", "r") as f:
-            data = json.load(f)
+        # Use a unique temp file to avoid concurrent request conflicts
+        fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="oscar_cyclonedx_")
+        os.close(fd)
+        try:
+            gen.generate(package_name, sbom_model.get_sbom(), tmp_path)
+            with open(tmp_path, "r") as f:
+                data = json.load(f)
+        finally:
+            os.unlink(tmp_path)
             
         return data
 
@@ -172,10 +180,16 @@ class SBOMExporter:
         """
         sbom_model = self._build_sbom_model(ecosystem, package_name, version, graph_data, vulnerabilities)
         gen = SBOMGenerator(sbom_type="spdx", format="json")
-        gen.generate(package_name, sbom_model.get_sbom(), "spdx.json")
         
-        with open("spdx.json", "r") as f:
-            data = json.load(f)
+        # Use a unique temp file to avoid concurrent request conflicts
+        fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="oscar_spdx_")
+        os.close(fd)
+        try:
+            gen.generate(package_name, sbom_model.get_sbom(), tmp_path)
+            with open(tmp_path, "r") as f:
+                data = json.load(f)
+        finally:
+            os.unlink(tmp_path)
             
         return data
 

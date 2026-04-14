@@ -50,26 +50,30 @@ class TemporalAnalyzer:
                     if files:
                         # take the first file's upload time
                         upload_time = files[0].get("upload_time_iso_8601") or files[0].get("upload_time")
-                        # PyPI /pypi/pkg/json doesn't give historical dependencies easily,
-                        # requires fetching /pypi/pkg/version/json usually, but we can default to 0
-                        # and let deps.dev provide missing data if possible.
-                        # Wait, we can fetch version details sequentially or parallel if needed, but 
-                        # for PyPI, let's keep direct_deps as 0 if we can't get it fast.
-                        direct_deps = 0
-                        if "requires_dist" in data.get("info", {}) and data["info"].get("version") == v:
-                            # if it's the latest
-                            direct_deps = len(data["info"].get("requires_dist") or [])
-
+                        # Fan-out will be resolved per-version during the enrichment phase
                         if upload_time:
                             versions.append({
                                 "version": v,
                                 "published_at": upload_time,
-                                "fan_out": direct_deps
+                                "fan_out": -1  # sentinel: resolve later
                             })
         
         # Sort by published string (ISO date format)
         versions.sort(key=lambda x: x.get("published_at", ""))
         return versions
+
+    async def _resolve_pypi_fan_out(self, package_name: str, version: str) -> int:
+        """Fetch requires_dist for a specific PyPI version."""
+        try:
+            async with PypiConnector() as pypi:
+                data = await pypi.fetch_package(package_name, version)
+                requires = data.get("info", {}).get("requires_dist") or []
+                # Filter out extras-only deps (e.g. "argon2-cffi ; extra == 'argon2'")
+                core_deps = [r for r in requires if "; extra ==" not in r]
+                return len(core_deps)
+        except Exception as e:
+            logger.warning(f"Failed to fetch PyPI deps for {package_name}@{version}: {e}")
+            return 0
 
     async def analyze_temporal(self, ecosystem: str, package_name: str, 
                                num_versions: int = 15) -> TemporalReport:
@@ -97,22 +101,23 @@ class TemporalAnalyzer:
 
         # Gather data concurrently with a semaphore
         sem = asyncio.Semaphore(5)
+        eco = ecosystem.lower()
         
         async def enrich_version(vid: int, vdata: dict) -> TemporalDataPoint:
             ver = vdata["version"]
             pub = vdata["published_at"]
-            fan_out_guess = vdata.get("fan_out", 0)
+            fan_out = vdata.get("fan_out", 0)
 
             async with sem:
+                # Resolve PyPI fan_out per-version if it was deferred
+                if fan_out == -1 and eco == "pypi":
+                    fan_out = await self._resolve_pypi_fan_out(package_name, ver)
+
                 # 1. Fetch historical dependents from deps.dev
                 dep_data = await self.deps_dev.get_dependents(ecosystem, package_name, ver)
                 global_fan_in = dep_data.total if dep_data else None
 
-                # For PyPI, if we didn't get fan_out, we can get it from deps_dev graph API conditionally
-                # but for now, we'll just use what we have or 0 if missing.
-
                 # 2. Historical vulnerability count
-                # query OSV to get vulnerabilities overlapping with this version
                 q = {
                     "ecosystem": ecosystem,
                     "package": package_name,
@@ -125,7 +130,7 @@ class TemporalAnalyzer:
                 return TemporalDataPoint(
                     version=ver,
                     published_at=pub,
-                    fan_out=fan_out_guess,
+                    fan_out=fan_out,
                     global_fan_in=global_fan_in,
                     vuln_count=vuln_count
                 )
@@ -143,3 +148,4 @@ class TemporalAnalyzer:
             total_versions_available=total_available,
             sampled_versions=len(data_points)
         )
+
