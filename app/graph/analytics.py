@@ -86,6 +86,20 @@ class AnalyticsService:
                         eigenvector = nx.eigenvector_centrality_numpy(subG).get(package_name, 0.0)
             except Exception:
                 pass
+
+            # Compute betweenness & closeness on the LOCAL transitive subgraph
+            # (not the full ecosystem graph, which would be O(V*E) expensive).
+            # The local subgraph = {root} ∪ ancestors ∪ descendants, typically 30–80 nodes.
+            try:
+                ancestors = nx.ancestors(G, package_name)
+                descendants = nx.descendants(G, package_name)
+                local_nodes = ancestors | descendants | {package_name}
+                if len(local_nodes) >= 3:  # need at least 3 nodes for meaningful centrality
+                    local_subgraph = G.subgraph(local_nodes)
+                    betweenness = nx.betweenness_centrality(local_subgraph).get(package_name, 0.0)
+                    closeness = nx.closeness_centrality(local_subgraph).get(package_name, 0.0)
+            except Exception:
+                pass
                 
         # Tier 2 Metrics (Libyears, Diamonds, Transitive Depth)
         try:
