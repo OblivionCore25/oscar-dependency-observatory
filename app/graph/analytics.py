@@ -4,12 +4,15 @@ OSCAR Dependency Graph Observatory — Analytics Service
 Computes central metrics on the graph structure using flat files.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Set
 from collections import defaultdict
+
+import networkx as nx
 
 from app.storage import StorageService
 from app.models.api import PackageMetrics, TopRiskItem, TopRiskResponse, CoverageResponse
 from app.graph.direct import DirectDependencyService
+from app.enrichment.enrichment_service import EnrichmentService
 
 class AnalyticsService:
     """
@@ -18,6 +21,21 @@ class AnalyticsService:
     
     def __init__(self, storage: StorageService):
         self.storage = storage
+
+    def _build_nx_graph(self, ecosystem: str) -> nx.DiGraph:
+        """
+        Builds a NetworkX directed graph of the ecosystem at the package name level.
+        We aggregate all version edges into a single structural dependency link 
+        between packages to ensure a connected graph for centralities.
+        """
+        G = nx.DiGraph()
+        all_edges = self.storage.get_all_edges(ecosystem)
+        
+        for edge in all_edges:
+            # We add unweighted edges if a dependency exists on any version
+            G.add_edge(edge.source_package, edge.target_package)
+            
+        return G
 
     async def get_package_metrics(self, ecosystem: str, package_name: str, version: str) -> PackageMetrics:
         """
@@ -38,13 +56,169 @@ class AnalyticsService:
         
         bottleneck_score = float(fan_in * fan_out)
         
+        # Build graph for centralities
+        G = self._build_nx_graph(ecosystem)
+        pagerank = 0.0
+        betweenness = 0.0
+        closeness = 0.0
+        eigenvector = 0.0
+        blast_radius = 0
+        libyears = 0.0
+        diamond_count = 0
+        transitive_depth = 0
+        
+        if G.has_node(package_name):
+            try:
+                pagerank = nx.pagerank(G).get(package_name, 0.0)
+            except:
+                pass
+            
+            # Calculate blast radius
+            blast_radius = len(nx.descendants(G, package_name))
+            
+            # Safely compute eigenvector on the largest connected component of the undirected graph
+            try:
+                if len(G) > 0:
+                    udG = G.to_undirected()
+                    largest_cc = max(nx.connected_components(udG), key=len)
+                    if package_name in largest_cc:
+                        subG = udG.subgraph(largest_cc)
+                        eigenvector = nx.eigenvector_centrality_numpy(subG).get(package_name, 0.0)
+            except Exception:
+                pass
+
+            # Compute betweenness & closeness on the LOCAL transitive subgraph
+            # (not the full ecosystem graph, which would be O(V*E) expensive).
+            # The local subgraph = {root} ∪ ancestors ∪ descendants, typically 30–80 nodes.
+            try:
+                ancestors = nx.ancestors(G, package_name)
+                descendants = nx.descendants(G, package_name)
+                local_nodes = ancestors | descendants | {package_name}
+                if len(local_nodes) >= 3:  # need at least 3 nodes for meaningful centrality
+                    local_subgraph = G.subgraph(local_nodes)
+                    betweenness = nx.betweenness_centrality(local_subgraph).get(package_name, 0.0)
+                    closeness = nx.closeness_centrality(local_subgraph).get(package_name, 0.0)
+            except Exception:
+                pass
+                
+        # Tier 2 Metrics (Libyears, Diamonds, Transitive Depth)
+        try:
+                # Setup dates and versions for libyears
+                all_versions = self.storage.get_all_versions(ecosystem)
+                from collections import defaultdict
+                versions_by_pkg = defaultdict(list)
+                for v in all_versions:
+                    versions_by_pkg[v.package_name].append(v)
+                
+                latest_date_by_pkg = {}
+                latest_version_by_pkg = {}
+                for pkg, vlist in versions_by_pkg.items():
+                    valid_versions = [v for v in vlist if v.published_at]
+                    if valid_versions:
+                        latest_v = max(valid_versions, key=lambda x: x.published_at)
+                        latest_date_by_pkg[pkg] = latest_v.published_at
+                        latest_version_by_pkg[pkg] = latest_v.version
+                    elif vlist:
+                        latest_version_by_pkg[pkg] = vlist[-1].version
+                        
+                date_by_vid = {f"{v.package_name}@{v.version}": v.published_at for v in all_versions if v.published_at}
+                
+                # Build version-aware directed graph to trace exact resolved dependencies
+                # We extract the base numerical constraint string to bind the correct baseline date for tech lag!
+                import re
+                VG = nx.DiGraph()
+                for edge in all_edges:
+                    base_ver = edge.resolved_target_version
+                    if not base_ver and edge.version_constraint:
+                        # Strip ^ ~ >= < markers to pinpoint the developer's exact pinned "developed against" threshold
+                        match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                        if match:
+                            base_ver = match.group(1)
+                    
+                    if not base_ver:
+                        base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                        
+                    VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+                root_id = f"{package_name}@{version}"
+                if VG.has_node(root_id):
+                    descendants_v = nx.descendants(VG, root_id)
+                    
+                    # Transitive Depth
+                    try:
+                        sub_VG = VG.subgraph(descendants_v | {root_id})
+                        transitive_depth = nx.dag_longest_path_length(sub_VG)
+                    except Exception:
+                        transitive_depth = 0
+                
+                # Compute diamonds and libyears
+                seen_pkgs = defaultdict(set)
+                for tgt_id in descendants_v:
+                    if "@" not in tgt_id: continue
+                    pkg_only, ver_only = tgt_id.rsplit("@", 1)
+                    seen_pkgs[pkg_only].add(ver_only)
+                    
+                    latest_date = latest_date_by_pkg.get(pkg_only)
+                    used_date = date_by_vid.get(tgt_id)
+                    
+                    if not used_date and pkg_only in versions_by_pkg:
+                        # Fuzzy match if constraint lacked patch version (e.g. "tough-cookie@2.4")
+                        for v in versions_by_pkg[pkg_only]:
+                            if v.version.startswith(ver_only) and v.published_at:
+                                used_date = v.published_at
+                                break
+                    
+                    if used_date and latest_date and latest_date > used_date:
+                        delta = (latest_date - used_date).days / 365.25
+                        libyears += delta
+                
+                # A diamond conflict is a transitive package required in multiple distinct versions
+                diamond_count = sum(1 for versions_set in seen_pkgs.values() if len(versions_set) > 1)
+                
+        except Exception as e:
+            import logging
+            logging.error(f"Tier 2 Metrics Calculation Failed: {e}")
+
+        # ── External Enrichment ────────────────────────────────────────
+        enrichment_svc = EnrichmentService()
+        try:
+            enrichment = await enrichment_svc.enrich_package(ecosystem, package_name, version)
+        except Exception:
+            enrichment = None
+
+        global_fan_in = enrichment.global_fan_in if enrichment else None
+        global_direct = enrichment.global_direct_dependents if enrichment else None
+        global_indirect = enrichment.global_indirect_dependents if enrichment else None
+        monthly_downloads = enrichment.monthly_downloads if enrichment else None
+        scorecard_score = enrichment.scorecard_score if enrichment else None
+        scorecard_checks = enrichment.scorecard_checks if enrichment else None
+        source_repo_url = enrichment.source_repo_url if enrichment else None
+
+        # Replace bottleneck score with globalFanIn × fanOut when available
+        if global_fan_in is not None:
+            bottleneck_score = float(global_fan_in * fan_out)
+
         return PackageMetrics(
             directDependencies=fan_out,
             transitiveDependencies=0,
             fanIn=fan_in,
             fanOut=fan_out,
             bottleneckScore=bottleneck_score,
-            diamondCount=0
+            diamondCount=diamond_count,
+            pageRank=pagerank,
+            closenessCentrality=closeness,
+            betweennessCentrality=betweenness,
+            eigenvectorCentrality=eigenvector,
+            blastRadius=blast_radius,
+            libyears=round(libyears, 2),
+            transitiveDepth=transitive_depth,
+            globalFanIn=global_fan_in,
+            globalDirectDependents=global_direct,
+            globalIndirectDependents=global_indirect,
+            monthlyDownloads=monthly_downloads,
+            scorecardScore=scorecard_score,
+            scorecardChecks=scorecard_checks,
+            sourceRepoUrl=source_repo_url,
         )
 
     async def get_top_risk(self, ecosystem: str, limit: int = 10) -> TopRiskResponse:
@@ -116,7 +290,37 @@ class AnalyticsService:
             items[0].bottleneck_percentile = 100.0
 
         items.sort(key=lambda x: (x.bottleneck_score, x.fan_in), reverse=True)
-        return TopRiskResponse(items=items[:limit], totalPackages=total)
+        top_items = items[:limit]
+        
+        # Now we only compute expensive centralities for the top N items being returned
+        G = self._build_nx_graph(ecosystem)
+        if len(G.nodes) > 0:
+            try:
+                pageranks = nx.pagerank(G)
+            except:
+                pageranks = {}
+                
+            try:
+                if len(G) > 0:
+                    udG = G.to_undirected()
+                    largest_cc = max(nx.connected_components(udG), key=len)
+                    subG = udG.subgraph(largest_cc)
+                    eigenvectors = nx.eigenvector_centrality_numpy(subG)
+                else:
+                    eigenvectors = {}
+            except Exception:
+                eigenvectors = {}
+                
+            for item in top_items:
+                pkg_name = item.name
+                if G.has_node(pkg_name):
+                    item.page_rank = pageranks.get(pkg_name, 0.0)
+                    item.eigenvector_centrality = eigenvectors.get(pkg_name, 0.0)
+                    item.blast_radius = len(nx.descendants(G, pkg_name))
+                    # Note: We omit betweenness/closeness here intentionally to avoid 
+                    # O(V*E) delays on API requests for the whole graph.
+        
+        return TopRiskResponse(items=top_items, totalPackages=total)
 
     # Known ecosystem sizes (approximate published figures, updated 2024)
     _ECOSYSTEM_ESTIMATES: Dict[str, int] = {
@@ -149,3 +353,104 @@ class AnalyticsService:
             estimatedTotal=estimated,
             coveragePct=coverage_pct,
         )
+
+    def get_transitive_depths(self, ecosystem: str, package_name: str, version: str) -> Dict[str, int]:
+        """
+        Computes the shortest path depth from the root node to all reachable dependencies.
+        Returns a dictionary mapping node IDs (e.g. 'pkg@1.0') to integer depths (0 = root, 1 = direct, 2+ = transitive).
+        """
+        all_edges = self.storage.get_all_edges(ecosystem)
+        all_versions = self.storage.get_all_versions(ecosystem)
+        
+        latest_version_by_pkg = {}
+        for v in all_versions:
+            latest_version_by_pkg[v.package_name] = v.version
+
+        import re
+        VG = nx.DiGraph()
+        for edge in all_edges:
+            base_ver = edge.resolved_target_version
+            if not base_ver and edge.version_constraint:
+                match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                if match:
+                    base_ver = match.group(1)
+            
+            if not base_ver:
+                base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                
+            VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+        root_id = f"{package_name}@{version}"
+        VG.add_node(root_id)
+        depths = nx.single_source_shortest_path_length(VG, root_id)
+            
+        return depths
+
+    def get_libyears_breakdown(self, ecosystem: str, package_name: str, version: str) -> Dict[str, float]:
+        """
+        Computes the libyears debt introduced by each transitive dependency.
+        Returns a dictionary mapping node IDs (e.g. 'pkg@ver') to libyears debt (float).
+        """
+        all_edges = self.storage.get_all_edges(ecosystem)
+        all_versions = self.storage.get_all_versions(ecosystem)
+        
+        from collections import defaultdict
+        import re
+        
+        versions_by_pkg = defaultdict(list)
+        for v in all_versions:
+            versions_by_pkg[v.package_name].append(v)
+            
+        latest_date_by_pkg = {}
+        latest_version_by_pkg = {}
+        for pkg, vlist in versions_by_pkg.items():
+            valid_versions = [v for v in vlist if v.published_at]
+            if valid_versions:
+                latest_v = max(valid_versions, key=lambda x: x.published_at)
+                latest_date_by_pkg[pkg] = latest_v.published_at
+                latest_version_by_pkg[pkg] = latest_v.version
+            elif vlist:
+                latest_version_by_pkg[pkg] = vlist[-1].version
+                
+        date_by_vid = {f"{v.package_name}@{v.version}": v.published_at for v in all_versions if v.published_at}
+        
+        VG = nx.DiGraph()
+        for edge in all_edges:
+            base_ver = edge.resolved_target_version
+            if not base_ver and edge.version_constraint:
+                match = re.search(r"(\d+\.\d+(?:\.\d+)?)", edge.version_constraint)
+                if match:
+                    base_ver = match.group(1)
+            
+            if not base_ver:
+                base_ver = latest_version_by_pkg.get(edge.target_package, "unknown")
+                
+            VG.add_edge(f"{edge.source_package}@{edge.source_version}", f"{edge.target_package}@{base_ver}")
+            
+        root_id = f"{package_name}@{version}"
+        libyears_breakdown = {}
+        
+        if VG.has_node(root_id):
+            descendants_v = nx.descendants(VG, root_id)
+            
+            for tgt_id in descendants_v:
+                if "@" not in tgt_id: continue
+                pkg_only, ver_only = tgt_id.rsplit("@", 1)
+                
+                latest_date = latest_date_by_pkg.get(pkg_only)
+                used_date = date_by_vid.get(tgt_id)
+                
+                if not used_date and pkg_only in versions_by_pkg:
+                    for v in versions_by_pkg[pkg_only]:
+                        if v.version.startswith(ver_only) and v.published_at:
+                            used_date = v.published_at
+                            break
+                            
+                if used_date and latest_date:
+                    delta = (latest_date - used_date).days / 365.25
+                    if delta > 0:
+                        libyears_breakdown[tgt_id] = round(delta, 2)
+                    else:
+                        libyears_breakdown[tgt_id] = 0.0
+                    
+        return libyears_breakdown

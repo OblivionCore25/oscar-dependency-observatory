@@ -16,7 +16,7 @@ Thank you for your interest in contributing! This project is an early-stage rese
 
 ```bash
 # Clone the repository
-git clone https://github.com/OblivionCore25/oscar-dependency-observatory.git
+git clone https://github.com/ANONYMIZED_AUTHOR/oscar-dependency-observatory.git
 cd oscar-dependency-observatory
 
 # Backend

@@ -48,6 +48,9 @@ from app.api.endpoints import router as dependencies_router
 from app.api.analytics import router as analytics_router
 from app.api.exports import router as exports_router
 from app.api.packages import router as packages_router
+from app.api.vuln_endpoint import router as vuln_router
+from app.api.temporal_router import router as temporal_router
+from app.api.cross_level_router import router as cross_level_router
 
 # ─── Health Endpoint ────────────────────────────────────────────────
 
@@ -66,10 +69,13 @@ async def health_check() -> HealthResponse:
 
 # ─── API Routers ────────────────────────────────────────────────────
 
+app.include_router(vuln_router)
 app.include_router(dependencies_router)
 app.include_router(analytics_router)
 app.include_router(exports_router)
 app.include_router(packages_router)
+app.include_router(temporal_router)
+app.include_router(cross_level_router)
 
 
 

@@ -50,6 +50,48 @@ async def get_transitive_dependencies(
 
 
 @router.get(
+    "/dependencies/{ecosystem}/{package:path}/{version}/depths",
+    summary="Get Transitive Depths",
+    description="Returns a dictionary mapping node IDs to their depth from the root."
+)
+async def get_package_depths(
+    ecosystem: str,
+    package: str,
+    version: str,
+    direct_service: DirectDependencyService = Depends(get_direct_dependency_service)
+):
+    from app.graph.analytics import AnalyticsService
+    analytics_service = AnalyticsService(direct_service.storage)
+    
+    try:
+        depths = analytics_service.get_transitive_depths(ecosystem, package, version)
+        return depths
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
+    "/dependencies/{ecosystem}/{package:path}/{version}/libyears",
+    summary="Get Transitive Libyears Breakdown",
+    description="Returns a dictionary mapping node IDs to their libyears debt."
+)
+async def get_package_libyears_breakdown(
+    ecosystem: str,
+    package: str,
+    version: str,
+    direct_service: DirectDependencyService = Depends(get_direct_dependency_service)
+):
+    from app.graph.analytics import AnalyticsService
+    analytics_service = AnalyticsService(direct_service.storage)
+    
+    try:
+        libyears = analytics_service.get_libyears_breakdown(ecosystem, package, version)
+        return libyears
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
     "/dependencies/{ecosystem}/{package:path}/{version}",
     response_model=DirectDependenciesResponse,
     summary="Get Direct Dependencies",
@@ -112,6 +154,17 @@ async def get_package_details(
 
         if not version_exists:
             raise HTTPException(status_code=404, detail=f"Version {version} not found for package {package}")
+            
+        # Guarantee local cache warming mathematically by fully pulling the transitive graph into local Postgres
+        # This pays a one-time ~3-8 second penalty, which fulfills the required constraints for true Libyear calculation.
+        from app.graph.transitive import TransitiveDependencyService
+        t_service = TransitiveDependencyService(direct_service)
+        try:
+            async for _ in t_service.stream_transitive_graph(ecosystem, package, version):
+                pass # Unroll the BFS stream exclusively to trigger the backend ingestion
+        except Exception as e:
+            import logging
+            logging.error(f"Transitive cache mapping failed in detail-view: {e}")
             
         metrics = await analytics_service.get_package_metrics(ecosystem, package, version)
         

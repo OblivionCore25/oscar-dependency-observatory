@@ -4,6 +4,7 @@ OSCAR Dependency Graph Observatory — PyPI Normalizer
 
 from typing import Dict, Any, List, Tuple, Optional
 import re
+from datetime import datetime
 
 from app.models.domain import Package, Version, DependencyEdge
 
@@ -28,11 +29,21 @@ class PypiNormalizer:
         name = info.get("name", "")
         version = info.get("version", "")
         
-        # PyPI releases dict contains timestamps, but we can fall back safely without it for this MVP
+        published_at = None
+        releases = raw_data.get("releases", {}).get(version, [])
+        if releases:
+            upload_time_str = releases[0].get("upload_time")
+            if upload_time_str:
+                try:
+                    published_at = datetime.fromisoformat(upload_time_str.replace('Z', '+00:00'))
+                except Exception:
+                    pass
+        
         return Version(
             package_name=name,
             ecosystem=cls.ECOSYSTEM,
-            version=version
+            version=version,
+            published_at=published_at
         )
 
     @classmethod
@@ -103,9 +114,36 @@ class PypiNormalizer:
     @classmethod
     def normalize_package_data(cls, raw_data: Dict[str, Any]) -> Tuple[Package, List[Version], List[DependencyEdge]]:
         """
-        Combines package, a single release version, and edges into the standard tuple output suitable for storage.
+        Combines package, all release versions, and edges into the standard tuple output suitable for storage.
         """
         package = cls.normalize_package(raw_data)
-        version = cls.normalize_version(raw_data)
+        
+        info = raw_data.get("info", {})
+        name = info.get("name", "")
+        
+        versions = []
+        releases = raw_data.get("releases", {})
+        from datetime import datetime
+        for ver_str, artifacts in releases.items():
+            published_at = None
+            if artifacts:
+                upload_time_str = artifacts[0].get("upload_time")
+                if upload_time_str:
+                    try:
+                        published_at = datetime.fromisoformat(upload_time_str.replace('Z', '+00:00'))
+                    except Exception:
+                        pass
+                        
+            versions.append(Version(
+                package_name=name,
+                ecosystem=cls.ECOSYSTEM,
+                version=ver_str,
+                published_at=published_at
+            ))
+            
+        req_version = info.get("version", "")
+        if not any(v.version == req_version for v in versions):
+            versions.append(cls.normalize_version(raw_data))
+            
         edges = cls.normalize_edges(raw_data)
-        return package, [version], edges
+        return package, versions, edges

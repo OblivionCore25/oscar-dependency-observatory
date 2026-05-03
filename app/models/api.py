@@ -99,7 +99,19 @@ class PackageMetrics(BaseModel):
     page_rank: float = Field(default=0.0, alias="pageRank")
     closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
+    libyears: float = Field(default=0.0, alias="libyears")
+    transitive_depth: int = Field(default=0, alias="transitiveDepth")
+
+    # External enrichment (deps.dev, OpenSSF Scorecard, registry downloads)
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    global_direct_dependents: Optional[int] = Field(default=None, alias="globalDirectDependents")
+    global_indirect_dependents: Optional[int] = Field(default=None, alias="globalIndirectDependents")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    scorecard_checks: Optional[dict] = Field(default=None, alias="scorecardChecks")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
 
     model_config = {"populate_by_name": True}
 
@@ -153,7 +165,14 @@ class TopRiskItem(BaseModel):
     page_rank: float = Field(default=0.0, alias="pageRank")
     closeness_centrality: float = Field(default=0.0, alias="closenessCentrality")
     betweenness_centrality: float = Field(default=0.0, alias="betweennessCentrality")
+    eigenvector_centrality: float = Field(default=0.0, alias="eigenvectorCentrality")
     blast_radius: int = Field(default=0, alias="blastRadius")
+
+    # External enrichment
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
 
     model_config = {"populate_by_name": True}
 
@@ -192,5 +211,68 @@ class CoverageResponse(BaseModel):
         alias="coveragePct",
         description="Percentage of the ecosystem covered by the ingested graph (0–100).",
     )
+
+    model_config = {"populate_by_name": True}
+
+
+# ─── Vulnerability ──────────────────────────────────────────────────
+
+class VulnerabilitySummary(BaseModel):
+    """A single known vulnerability (CVE/GHSA) for a package version."""
+
+    id: str = Field(..., description="Advisory ID", examples=["GHSA-462w-v97r-4m45"])
+    aliases: List[str] = Field(default_factory=list, description="CVE aliases", examples=[["CVE-2019-10906"]])
+    summary: str = Field(default="", description="Short description of the vulnerability")
+    severity: str = Field(default="UNKNOWN", description="CRITICAL, HIGH, MODERATE, LOW, or UNKNOWN")
+    published: str = Field(default="", description="ISO 8601 publication date")
+    fixed_versions: List[str] = Field(default_factory=list, alias="fixedVersions", description="Versions that fix this vulnerability")
+    affected_functions: List[str] = Field(default_factory=list, alias="affectedFunctions", description="Specific functions affected by this vulnerability according to OSV ecosystem data")
+
+    model_config = {"populate_by_name": True}
+
+
+class VulnerabilityBreakdownResponse(BaseModel):
+    """Response for GET /dependencies/{ecosystem}/{package}/{version}/vulnerabilities"""
+
+    breakdown: dict = Field(
+        default_factory=dict,
+        description="Maps pkg@ver to list of vulnerability summaries",
+    )
+    total_affected: int = Field(
+        default=0,
+        alias="totalAffected",
+        description="Count of packages with at least 1 known vulnerability",
+    )
+    total_vulns: int = Field(
+        default=0,
+        alias="totalVulns",
+        description="Total CVE count across all transitive dependencies",
+    )
+    severity_counts: dict = Field(
+        default_factory=lambda: {"CRITICAL": 0, "HIGH": 0, "MODERATE": 0, "LOW": 0, "UNKNOWN": 0},
+        alias="severityCounts",
+        description="Breakdown of total vulnerabilities by severity level",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+# ─── Enrichment ─────────────────────────────────────────────────────
+
+class EnrichmentResponse(BaseModel):
+    """Response for GET /analytics/enrich/{ecosystem}/{package}/{version}"""
+
+    ecosystem: str = Field(..., examples=["npm"])
+    package: str = Field(..., examples=["express"])
+    version: str = Field(..., examples=["5.1.0"])
+    global_fan_in: Optional[int] = Field(default=None, alias="globalFanIn")
+    global_direct_dependents: Optional[int] = Field(default=None, alias="globalDirectDependents")
+    global_indirect_dependents: Optional[int] = Field(default=None, alias="globalIndirectDependents")
+    monthly_downloads: Optional[int] = Field(default=None, alias="monthlyDownloads")
+    scorecard_score: Optional[float] = Field(default=None, alias="scorecardScore")
+    scorecard_checks: Optional[dict] = Field(default=None, alias="scorecardChecks")
+    source_repo_url: Optional[str] = Field(default=None, alias="sourceRepoUrl")
+    licenses: List[str] = Field(default_factory=list)
+    is_deprecated: bool = Field(default=False, alias="isDeprecated")
 
     model_config = {"populate_by_name": True}

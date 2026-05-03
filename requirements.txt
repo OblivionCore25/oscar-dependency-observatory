@@ -11,9 +11,16 @@ pydantic-settings==2.8.1
 # HTTP client (for registry connectors)
 httpx==0.28.1
 
+# TTL caching for external API enrichment
+cachetools>=5.0.0
+
 # Graph processing
 networkx>=3.0.0
 
 # Database
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
+
+# Export and compliance
+lib4sbom>=0.10.3
+packageurl-python>=0.17.6
