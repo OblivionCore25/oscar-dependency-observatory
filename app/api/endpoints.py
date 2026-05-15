@@ -144,13 +144,21 @@ async def get_package_details(
     
     try:
         versions = direct_service.storage.get_versions(ecosystem, package)
-        version_exists = any(v.version == version for v in versions)
+        from app.graph.direct import _normalize_pypi_version
+        canonical_version = _normalize_pypi_version(version) if ecosystem.lower() == "pypi" else version
+        version_exists = any(
+            v.version == version or v.version == canonical_version
+            for v in versions
+        )
 
         if not version_exists:
             # Auto-ingest the specific version if it isn't stored yet
             await direct_service._ingest_package(ecosystem, package, version)
             versions = direct_service.storage.get_versions(ecosystem, package)
-            version_exists = any(v.version == version for v in versions)
+            version_exists = any(
+                v.version == version or v.version == canonical_version
+                for v in versions
+            )
 
         if not version_exists:
             raise HTTPException(status_code=404, detail=f"Version {version} not found for package {package}")

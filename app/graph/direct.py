@@ -6,6 +6,7 @@ of a specific package version, auto-ingesting if necessary.
 """
 
 from typing import List, Optional
+import re
 
 from app.ingestion.npm import NpmConnector, PackageNotFoundError
 from app.normalization.npm_normalizer import NpmNormalizer
@@ -13,6 +14,25 @@ from app.ingestion.pypi import PypiConnector
 from app.normalization.pypi_normalizer import PypiNormalizer
 from app.storage import StorageService
 from app.models.api import DependencyItem
+
+
+def _normalize_pypi_version(version: str) -> str:
+    """
+    Normalize a PyPI version string to its canonical PEP 440 form by stripping
+    trailing '.0' segments that PyPI omits in its release keys.
+
+    Examples:
+        '26.2.0' -> '26.2'
+        '68.1.0' -> '68.1'
+        '5.4.0'  -> '5.4'
+        '6.0.3'  -> '6.0.3'  (unchanged — .3 is significant)
+        '1.0.0'  -> '1.0'    (strip one level only)
+    """
+    # Strip trailing '.0' components, but keep at least major.minor
+    parts = version.split('.')
+    while len(parts) > 2 and parts[-1] == '0':
+        parts.pop()
+    return '.'.join(parts)
 
 class DirectDependencyService:
     """
@@ -35,15 +55,24 @@ class DirectDependencyService:
         # If we do, we assume we have its edges.
         # This is a naive MVP check: if version exists, we don't re-ingest.
         versions = self.storage.get_versions(ecosystem, package_name)
-        version_exists = any(v.version == version for v in versions)
+        # For PyPI, PyPI's API returns canonical versions that may strip trailing
+        # '.0' segments (e.g. '26.2.0' is stored as '26.2'). Normalize before comparing.
+        canonical_version = _normalize_pypi_version(version) if ecosystem.lower() == "pypi" else version
+        version_exists = any(
+            v.version == version or v.version == canonical_version
+            for v in versions
+        )
 
         if not version_exists:
             # Auto-ingest fallback: pass the specific version so PyPI fetches the right one
             await self._ingest_package(ecosystem, package_name, version)
             
-            # Check again after ingestion
+            # Check again after ingestion — also match canonical form
             versions = self.storage.get_versions(ecosystem, package_name)
-            version_exists = any(v.version == version for v in versions)
+            version_exists = any(
+                v.version == version or v.version == canonical_version
+                for v in versions
+            )
             if not version_exists:
                 # The package exists on the registry, but the requested version does not.
                 raise ValueError(f"Version {version} not found for package {package_name}")

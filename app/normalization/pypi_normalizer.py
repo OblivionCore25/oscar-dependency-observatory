@@ -16,7 +16,7 @@ class PypiNormalizer:
     def normalize_package(cls, raw_data: Dict[str, Any]) -> Package:
         """Extract identity package from PyPI response."""
         info = raw_data.get("info", {})
-        name = info.get("name", "")
+        name = info.get("name", "").lower()
         return Package(
             ecosystem=cls.ECOSYSTEM,
             name=name
@@ -26,7 +26,7 @@ class PypiNormalizer:
     def normalize_version(cls, raw_data: Dict[str, Any]) -> Version:
         """Extract strict Version identity."""
         info = raw_data.get("info", {})
-        name = info.get("name", "")
+        name = info.get("name", "").lower()
         version = info.get("version", "")
         
         published_at = None
@@ -89,7 +89,7 @@ class PypiNormalizer:
     def normalize_edges(cls, raw_data: Dict[str, Any]) -> List[DependencyEdge]:
         """Extract direct edges recursively from requires_dist payload."""
         info = raw_data.get("info", {})
-        source_name = info.get("name", "")
+        source_name = info.get("name", "").lower()
         source_version = info.get("version", "")
         
         requires_dist = info.get("requires_dist")
@@ -105,7 +105,7 @@ class PypiNormalizer:
             edges.append(DependencyEdge(
                 source_package=source_name,
                 source_version=source_version,
-                target_package=target_name,
+                target_package=target_name.lower(),
                 version_constraint=constraint,
                 ecosystem=cls.ECOSYSTEM
             ))
@@ -119,7 +119,7 @@ class PypiNormalizer:
         package = cls.normalize_package(raw_data)
         
         info = raw_data.get("info", {})
-        name = info.get("name", "")
+        name = info.get("name", "").lower()
         
         versions = []
         releases = raw_data.get("releases", {})
